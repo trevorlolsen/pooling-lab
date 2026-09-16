@@ -1,6 +1,7 @@
 import * as Plot from '@observablehq/plot'
 import { armEstimates, truthValues, borrowingTargets, zip, plogis } from '../lib/transforms.js'
 import { posteriorBoxes, boxMarks } from './posteriorBoxes.js'
+import { keepBands } from '../lib/bandFilter.js'
 
 /**
  * Where each player gets pulled TO, once the model knows a grouping.
@@ -14,10 +15,14 @@ import { posteriorBoxes, boxMarks } from './posteriorBoxes.js'
  * question here is "which target did this player get", not "how much data did
  * they have". The global target stays on the chart as a faint reference so the
  * reader can see how far the group means sit from it.
+ *
+ * `bands` is the reader's filter on observation count: an array of n_train
+ * values to draw, or null for everyone. The panels and their target lines are
+ * the model's, not the reader's, so they stay even when a panel is emptied.
  */
 export function borrowingSplit ({
   scenario, index, tokens, armId, scale, difficulty, view = 'point',
-  layers = {}, width = 760, height = 520
+  layers = {}, bands = null, width = 760, height = 520
 }) {
   const on = (id) => layers[id] !== false
   const opts = { scale, difficulty, difficultyGrid: index.difficulty_grid }
@@ -33,7 +38,9 @@ export function borrowingSplit ({
   // The one target a covariate-free model would have used, for contrast.
   const globalTarget = borrowingTargets(scenario.arms.none, opts)[0]?.target ?? null
 
-  const rows = truth.map((t) => {
+  // Every player, before the reader's band filter: the group targets come from
+  // here, so hiding a band never moves or removes a target line.
+  const allRows = truth.map((t) => {
     const g = cov.group[t.child_id - 1]
     return {
       child_id: t.child_id,
@@ -50,6 +57,7 @@ export function borrowingSplit ({
       matches: t.true_group === cov.levels[g - 1]
     }
   })
+  const rows = keepBands(allRows, bands)
 
   const groups = cov.levels
   const byGroup = new Map(groups.map((g) => [g, []]))
@@ -75,7 +83,7 @@ export function borrowingSplit ({
     : scale === 'theta' ? t : plogis(t - difficulty))
   const groupTargets = groups.map((g) => ({
     group: g,
-    target: byGroup.get(g)?.[0]?.target ?? null,
+    target: allRows.find((r) => r.group === g)?.target ?? null,
     trueMean: toScale(trueByGroup.get(g))
   })).filter((d) => d.target != null)
 
@@ -219,7 +227,9 @@ export function borrowingSplit ({
       domain: scale === 'theta' ? index.domains.theta : [0, 1],
       grid: true
     },
-    y: { type: 'linear', domain: [widest + 0.6, 0.4], axis: null, label: null },
+    // `widest` is 0 only when the filter has emptied every panel, which the
+    // control forbids; the guard keeps the domain sane regardless.
+    y: { type: 'linear', domain: [Math.max(widest, 1) + 0.6, 0.4], axis: null, label: null },
     fy: { domain: groups, label: null, axis: 'left' },
     facet: { data: rows, y: 'group' },
     style: { fontSize: '12px', background: 'transparent' },

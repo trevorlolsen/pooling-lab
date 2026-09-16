@@ -1,6 +1,7 @@
 import * as Plot from '@observablehq/plot'
 import { zip } from '../lib/transforms.js'
 import { ellipseRows, toScale } from '../lib/ellipse.js'
+import { keepBands } from '../lib/bandFilter.js'
 
 /**
  * The 2D flagship: every player as a point in the skill plane, and where each
@@ -18,10 +19,13 @@ import { ellipseRows, toScale } from '../lib/ellipse.js'
  *   2  + partial pooling, arrows
  *   3  + band emphasis (the sparsest band stays lit, the rest dim)
  *   4  + truth and the true population mean
+ *
+ * `bands` is the reader's filter on observation count: an array of n_train
+ * values to draw, or null for everyone.
  */
 export function playerEllipses ({
   scenario, index, tokens, scale, difficulty, step = 4, view = 'point',
-  layers = {}, selectedPlayer, onSelect, width = 760, height = 560
+  layers = {}, bands = null, selectedPlayer, onSelect, width = 760, height = 560
 }) {
   const on = (id, atStep = 0) => layers[id] !== false && step >= atStep
   const at = (x, y) => toScale({ x, y }, scale, difficulty)
@@ -29,7 +33,7 @@ export function playerEllipses ({
   const noPool = new Map(zip(scenario.arms.no_pool?.players2d).map((d) => [d.child_id, d]))
   const partial = new Map(zip(scenario.arms.none?.players2d).map((d) => [d.child_id, d]))
   const complete = zip(scenario.arms.complete?.players2d)[0] ?? null
-  const truth = zip(scenario.truth)
+  const truth = keepBands(zip(scenario.truth), bands)
 
   // Complete pooling gives every player the same point; draw it once.
   const completePoint = complete ? at(complete.mean1, complete.mean2) : null
@@ -55,10 +59,10 @@ export function playerEllipses ({
     }
   })
 
-  const bands = [...new Set(rows.map((d) => d.band))]
+  const bandLabels = [...new Set(rows.map((d) => d.band))]
     .sort((a, b) => parseInt(a) - parseInt(b))
-  // Step 3 lights the sparsest band and dims the rest.
-  const emphasisBand = step === 3 ? bands[0] : null
+  // Step 3 lights the sparsest band SHOWN and dims the rest.
+  const emphasisBand = step === 3 ? bandLabels[0] : null
   const dim = (d) => (emphasisBand && d.band !== emphasisBand ? 0.18 : 1)
 
   const pt = (x, y) => `(${x?.toFixed(2)}, ${y?.toFixed(2)})`

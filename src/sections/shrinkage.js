@@ -5,6 +5,7 @@ import { playerRows } from '../charts/playerRows.js'
 import { playerEllipses } from '../charts/playerEllipses.js'
 import { hasPosteriorQuantiles } from '../charts/posteriorBoxes.js'
 import { layerLegend } from '../lib/layers.js'
+import { bandFilter, scenarioBands } from '../lib/bandFilter.js'
 
 /**
  * Section 3 — the flagship. One chart, pinned, carrying a five-beat argument as
@@ -86,10 +87,12 @@ function captionText (twoD, view) {
   const base = twoD
     ? 'One point per player, in both skills at once. ' +
       'The grey arrow is the pull: from what the player\'s own plays say to where the model put them. ' +
-      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart.'
+      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart. ' +
+      'The buttons above hide or show players by how many plays they have; the numbers below the chart always count everyone.'
     : 'One row per player, grouped by how many serves we watched. Rows are sorted by their no-pooling estimate. ' +
       'The grey segment is the pull: from what the player\'s own serves say to where the model put them. ' +
-      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart.'
+      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart. ' +
+      'The buttons above hide or show players by how many serves they have; the numbers below the chart always count everyone.'
   if (view !== 'posterior') return base
   return base + (twoD
     ? ' Each ring encloses 50% of that model\'s posterior; a tilted ring means the model is borrowing across skills.'
@@ -157,6 +160,7 @@ export function adaptiveShrinkage () {
         <div class="scrolly-graphic">
           <figure class="chart-panel">
             <div data-role="legend"></div>
+            <div data-role="filter"></div>
             <div data-role="chart"></div>
             <figcaption data-role="caption">${captionText(twoD, state.view)}</figcaption>
             <div data-role="posterior-notice"></div>
@@ -175,12 +179,36 @@ export function adaptiveShrinkage () {
   // Estimates/Posteriors switch -- so it is rebuilt when the view changes, with
   // the reader's toggles carried across.
   let legendView = null
+  // The band filter: which observation counts are drawn. Built once per
+  // ladder and carried across renders; every scenario uses the same ladder,
+  // but if one ever did not, the control is rebuilt with the reader's choices
+  // kept where they still apply.
+  let filter = null
+  let filterKey = null
   let step = STEPS.length - 1
   let ready = false
 
   function render () {
     const { scenario, index, tokens, scale, difficulty } = state
     if (!scenario) return
+    const bands = scenarioBands(scenario)
+    const key = bands.join(',')
+    if (!filter || filterKey !== key) {
+      const wasShown = filter ? new Set(filter.get()) : null
+      filter = bandFilter({ bands, unit: twoD ? 'plays' : 'serves', onChange: () => render() })
+      // Carry the reader's choice across a rebuild where it still applies.
+      if (wasShown) {
+        for (const b of bands) {
+          if (!wasShown.has(b) && filter.get().length > 1) {
+            filter.el.querySelector(`button[data-band="${b}"]`)?.click()
+          }
+        }
+      }
+      filterKey = key
+      const host = el.querySelector('[data-role="filter"]')
+      host.innerHTML = ''
+      host.appendChild(filter.el)
+    }
     if (!legend || legendView !== state.view) {
       const wasOn = legend ? legend.get() : {}
       const items = legendItems({ twoD, view: state.view, tokens, index })
@@ -208,6 +236,7 @@ export function adaptiveShrinkage () {
         step,
         view: state.view,
         layers: legend.get(),
+        bands: filter.get(),
         selectedPlayer: state.selectedPlayer,
         onSelect: (id) => setState({ selectedPlayer: id }, 'select'),
         width: chart.clientWidth || 760,
@@ -222,6 +251,7 @@ export function adaptiveShrinkage () {
         step,
         view: state.view,
         layers: legend.get(),
+        bands: filter.get(),
         // Null until the reader actually clicks. A ring sitting on player 1
         // before anyone chose them is just noise.
         selectedPlayer: state.selectedPlayer,

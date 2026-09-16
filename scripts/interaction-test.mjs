@@ -246,6 +246,69 @@ ok(/one population|sample from/i.test(document.getElementById('team').textConten
   ok(snap('shrinkage') === before, 'toggling twice should restore the chart exactly')
 }
 
+// --- band filter hides players by observation count ---------------------
+// Sections 2, 5 and 6 each carry a filter on the 5/10/20/30 ladder. Hiding a
+// band must remove those players (and, in section 2, their facet) from the
+// chart, must leave the takeaway alone, and must be fully reversible.
+{
+  // The control repaints its buttons on every click, so always look them up
+  // fresh rather than holding a reference across a click.
+  const click = (node) => node.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+  const bandButtons = (id) => [...document.getElementById(id)
+    .querySelectorAll('.band-filter button[data-band]')].filter((b) => b.dataset.band !== 'all')
+  const pressed = (id, band) => document.getElementById(id)
+    .querySelector(`.band-filter button[data-band="${band}"]`)?.getAttribute('aria-pressed')
+  const clickBand = async (id, band) => {
+    click(document.getElementById(id).querySelector(`.band-filter button[data-band="${band}"]`))
+    await settle(60)
+  }
+  const playerTitles = (id) => [...chartSvg(id).querySelectorAll('title')]
+    .filter((t) => /^Player \d+ — \d+ serves/.test(t.textContent)).length
+
+  for (const id of ['shrinkage', 'covariate-correct', 'covariate-wrong']) {
+    const bands = bandButtons(id).map((b) => Number(b.dataset.band))
+    ok(bands.length === 4, `${id}: expected four band buttons, found ${bands.length}`)
+    ok(bands.every((b) => pressed(id, b) === 'true'), `${id}: every band should start shown`)
+    ok(document.getElementById(id).querySelector('.band-filter-all')?.hidden,
+      `${id}: "Show all" should be hidden while every band is shown`)
+
+    const before = snap(id)
+    const beforeText = takeaway(id)
+    const beforeTitles = playerTitles(id)
+    ok(beforeTitles === 40, `${id}: should tooltip all 40 players before filtering, got ${beforeTitles}`)
+
+    await clickBand(id, bands[0]) // hide the five-serve players
+    ok(snap(id) !== before, `${id}: hiding a band should redraw the chart`)
+    ok(pressed(id, bands[0]) === 'false', `${id}: the hidden band should read as off`)
+    ok(!/\b5 serves/.test(snap(id)), `${id}: no five-serve player should remain on the chart`)
+    ok(playerTitles(id) === 30, `${id}: 30 players should remain, got ${playerTitles(id)}`)
+    ok(takeaway(id) === beforeText, `${id}: the takeaway must not change with the filter`)
+    ok(!document.getElementById(id).querySelector('.band-filter-all').hidden,
+      `${id}: "Show all" should appear once a band is hidden`)
+
+    // The last band on cannot be turned off.
+    await clickBand(id, bands[1])
+    await clickBand(id, bands[2])
+    ok(pressed(id, bands[3]) === 'true', `${id}: one band should be left on`)
+    await clickBand(id, bands[3])
+    ok(pressed(id, bands[3]) === 'true', `${id}: the last band on must refuse to turn off`)
+    ok(playerTitles(id) === 10, `${id}: a single band should leave 10 players, got ${playerTitles(id)}`)
+
+    await clickBand(id, 'all')
+    ok(snap(id) === before, `${id}: "Show all" should restore the chart exactly`)
+    ok(bands.every((b) => pressed(id, b) === 'true'), `${id}: "Show all" should press every band`)
+  }
+
+  // Section 2 loses the facet as well as the rows.
+  {
+    await clickBand('shrinkage', 30)
+    ok(!/30 serves/.test(snap('shrinkage')), 'shrinkage: a hidden band should lose its facet label')
+    ok(/20 serves/.test(snap('shrinkage')), 'shrinkage: the other facets should keep their labels')
+    await clickBand('shrinkage', 'all')
+  }
+  console.log('  band filter: 5/10/20/30 buttons on sections 2, 5 and 6; hide, floor at one band, show all')
+}
+
 // --- player selection ---------------------------------------------------
 const beforeSelect = snap('shrinkage')
 setState({ selectedPlayer: 12 }, 'select')
@@ -290,6 +353,24 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   for (const id of ['team', 'shrinkage', 'covariate-correct', 'covariate-wrong',
     'evidence', 'convergence', 'team-sweep']) {
     ok(chartSvg(id), `2D: ${id} should render a chart on mount`)
+  }
+
+  // The band filter follows the dimension: plays, not serves, and it still
+  // removes players from the ellipse chart.
+  {
+    const sec = document.getElementById('shrinkage')
+    const buttons = [...sec.querySelectorAll('.band-filter button[data-band]')].filter((b) => b.dataset.band !== 'all')
+    ok(buttons.length === 4, `2D: expected four band buttons on the shrinkage section, found ${buttons.length}`)
+    ok(/plays/.test(sec.querySelector('.band-filter')?.textContent ?? ''), '2D: the band filter should count plays')
+    const before = snap('shrinkage')
+    sec.querySelector('.band-filter button[data-band="5"]')
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    await settle(80)
+    ok(snap('shrinkage') !== before, '2D: hiding a band should redraw the ellipse chart')
+    ok(!/\b5 plays/.test(snap('shrinkage')), '2D: no five-play player should remain on the chart')
+    sec.querySelector('.band-filter-all').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    await settle(80)
+    ok(snap('shrinkage') === before, '2D: "Show all" should restore the ellipse chart exactly')
   }
 
   // Clicking a player in 2D should quote their numbers in BOTH skills.

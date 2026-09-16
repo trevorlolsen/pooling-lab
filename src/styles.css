@@ -153,6 +153,25 @@ figcaption { font-size: 12.5px; color: var(--ink-faint); margin-top: 0.5rem; }
 .legend .covariate::before { color: var(--covariate); content: '◆'; }
 .legend .truth::before { color: var(--truth); content: '✕'; }
 
+/* The band filter: which players, by how many observations they have. It sits
+   under the legend and borrows the rail's segmented-button look. */
+.band-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.band-filter .seg button {
+  padding: 0.15rem 0.55rem;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.band-filter-all { font-size: 11px; padding: 0.12rem 0.45rem; }
+
 /* --- callouts --------------------------------------------------------- */
 
 .takeaway {

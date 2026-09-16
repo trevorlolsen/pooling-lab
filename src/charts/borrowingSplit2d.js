@@ -1,6 +1,7 @@
 import * as Plot from '@observablehq/plot'
 import { zip, plogis } from '../lib/transforms.js'
 import { ellipseRows, toScale } from '../lib/ellipse.js'
+import { keepBands } from '../lib/bandFilter.js'
 
 /**
  * Where each player gets pulled TO in the skill plane, once the model knows a
@@ -18,10 +19,14 @@ import { ellipseRows, toScale } from '../lib/ellipse.js'
  *
  * Every mark here carries its own data, so every mark sets `fx`; without it
  * Plot repeats the mark in every panel (CLAUDE.md, "Charts").
+ *
+ * `bands` is the reader's filter on observation count: an array of n_train
+ * values to draw, or null for everyone. Panels and targets are the model's,
+ * so they stay even when a panel is emptied.
  */
 export function borrowingSplit2d ({
   scenario, index, tokens, armId, scale, difficulty, view = 'point',
-  layers = {}, width = 760, height = 520
+  layers = {}, bands = null, width = 760, height = 520
 }) {
   const on = (id) => layers[id] !== false
   const arm = scenario.arms?.[armId]
@@ -40,7 +45,9 @@ export function borrowingSplit2d ({
 
   const pt = (x, y) => `(${x?.toFixed(2)}, ${y?.toFixed(2)})`
 
-  const rows = truth.map((t) => {
+  // Every player, before the reader's band filter: the group targets are read
+  // from here, so hiding a band never removes a panel's diamond.
+  const allRows = truth.map((t) => {
     const np = noPool.get(t.child_id)
     const pp = pooled.get(t.child_id)
     const npP = np ? at(np.mean1, np.mean2) : null
@@ -60,6 +67,7 @@ export function borrowingSplit2d ({
       matches: t.true_group === group
     }
   })
+  const rows = keepBands(allRows, bands)
 
   // One row per panel: the group's estimated target with its 90% cross, and
   // its true mean. The true mean per analysis level is composition weighted --
@@ -72,7 +80,7 @@ export function borrowingSplit2d ({
   const true2 = trueMeanOf(1)
   const groupRows = groups.map((g, gi) => {
     // The target is per player but identical within a group; take the first.
-    const member = rows.find((r) => r.group === g)
+    const member = allRows.find((r) => r.group === g)
     const t = member ? targets.get(member.child_id) : null
     const m1 = true1.get(g) ?? true1.get(gi + 1)
     const m2 = true2.get(g) ?? true2.get(gi + 1)

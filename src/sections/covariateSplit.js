@@ -4,6 +4,7 @@ import { zip, borrowingTargets, plogis } from '../lib/transforms.js'
 import { borrowingSplit } from '../charts/borrowingSplit.js'
 import { borrowingSplit2d } from '../charts/borrowingSplit2d.js'
 import { layerLegend } from '../lib/layers.js'
+import { bandFilter, scenarioBands, keepBands } from '../lib/bandFilter.js'
 
 /**
  * What a covariate actually changes: not how hard the model pulls, but WHERE it
@@ -29,6 +30,7 @@ export function covariateSplit ({ armId, number, eyebrow }) {
       </header>
       <figure class="chart-panel">
         <div class="legend" data-role="legend"></div>
+        <div data-role="filter"></div>
         <div data-role="chart"></div>
         <figcaption data-role="caption"></figcaption>
       </figure>
@@ -43,13 +45,20 @@ export function covariateSplit ({ armId, number, eyebrow }) {
   // One skill/Two skills toggle, so the legend is rebuilt when either changes,
   // with the reader's toggles carried across.
   let legendKey = null
+  // The band filter: which observation counts are drawn. Keyed on the ladder
+  // and the unit, since a dimension change turns serves into plays.
+  let filter = null
+  let filterKey = null
 
   function unavailable (message) {
     el.querySelector('[data-role="headline"]').textContent = 'Not available for this population'
     el.querySelector('[data-role="lede"]').textContent = message
     el.querySelector('[data-role="legend"]').innerHTML = ''
+    el.querySelector('[data-role="filter"]').innerHTML = ''
     legend = null
     legendKey = null
+    filter = null
+    filterKey = null
     chart.innerHTML = ''
     el.querySelector('[data-role="caption"]').textContent = ''
     el.querySelector('[data-role="takeaway"]').innerHTML = ''
@@ -131,6 +140,27 @@ export function covariateSplit ({ armId, number, eyebrow }) {
     const posterior = state.view === 'posterior'
     const unit = twoD ? 'plays' : 'serves'
 
+    const bands = scenarioBands(scenario)
+    const fkey = `${bands.join(',')}|${unit}`
+    if (!filter || filterKey !== fkey) {
+      const wasShown = filter ? new Set(filter.get()) : null
+      filter = bandFilter({ bands, unit, onChange: () => render() })
+      // Carry the reader's choice across a rebuild where it still applies.
+      if (wasShown) {
+        for (const b of bands) {
+          if (!wasShown.has(b) && filter.get().length > 1) {
+            filter.el.querySelector(`button[data-band="${b}"]`)?.click()
+          }
+        }
+      }
+      filterKey = fkey
+      el.querySelector('[data-role="filter"]').innerHTML = ''
+      el.querySelector('[data-role="filter"]').appendChild(filter.el)
+    }
+    // Rows the chart will draw, for sizing it. Panels come from the model, so
+    // the group term stays; the per-player term follows the filter.
+    const nShown = keepBands(zip(scenario.truth), filter.get()).length
+
     const key = `${state.view}|${twoD ? '2d' : '1d'}`
     if (!legend || legendKey !== key) {
       const wasOn = legend ? legend.get() : {}
@@ -169,21 +199,23 @@ export function covariateSplit ({ armId, number, eyebrow }) {
       ? borrowingSplit2d({
         scenario, index, tokens, armId, scale, difficulty, view: state.view,
         layers: legend.get(),
+        bands: filter.get(),
         width: chart.clientWidth || 760,
         // Panels sit side by side in the plane, so the height grows more gently
         // with the team than the row chart does.
-        height: Math.max(420, 60 + 30 * cov.G + 12 * scenario.n_players)
+        height: Math.max(420, 60 + 30 * cov.G + 12 * nShown)
       })
       : borrowingSplit({
         scenario, index, tokens, armId, scale, difficulty, view: state.view,
         layers: legend.get(),
+        bands: filter.get(),
         width: chart.clientWidth || 760,
         // Not pinned, so it can exceed the viewport -- but only a little. At 22px
         // per row this ran past 1000px and took a screen and a half to scan; 15px
         // is enough for a box plus separation and keeps the whole comparison in
         // roughly one screen. Every player appears once across the panels, so row
         // height scales with the team, not the group count.
-        height: Math.max(400, 60 + 30 * cov.G + 15 * scenario.n_players)
+        height: Math.max(400, 60 + 30 * cov.G + 15 * nShown)
       }))
 
     // The caption is assembled sentence by sentence: what each mark is, then
@@ -209,14 +241,18 @@ export function covariateSplit ({ armId, number, eyebrow }) {
          each skill — the place its players get pulled toward; ${trueSentence}.
          The blue dashed crosshair is the estimated population mean μ a model
          without any covariate would have used. The grey arrow is the pull: from
-         what the player's own plays say to where the model put
-         them.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}${mismatchSentence}`
+         what the player's own plays say to where the model put them. The
+         buttons above hide or show players by how many plays they have; the
+         panels and their diamonds stay
+         put.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}${mismatchSentence}`
       : `One panel per assigned group. The solid line in each panel is that group's
          estimated mean — the place its players get pulled toward. ${trueSentence}.
          The blue dashed line is the estimated population mean μ a model without
          any covariate would have used. The grey segment is the pull: from what the
          player's own serves say to where the model put them. Rows are sorted by
-         their no-pooling estimate.${posterior ? " Box = the middle 50% of that model's posterior, whiskers = 90%." : ''}${mismatchSentence}`
+         their no-pooling estimate. The buttons above hide or show players by how
+         many serves they have; the panels and their target lines stay
+         put.${posterior ? " Box = the middle 50% of that model's posterior, whiskers = 90%." : ''}${mismatchSentence}`
 
     const fmt = (x) => (scale === 'theta' ? x.toFixed(2) : x.toFixed(3))
     const globalText = twoD

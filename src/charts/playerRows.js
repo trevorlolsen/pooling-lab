@@ -1,6 +1,7 @@
 import * as Plot from '@observablehq/plot'
 import { armEstimates, truthValues, plogis } from '../lib/transforms.js'
 import { posteriorBoxes, boxMarks } from './posteriorBoxes.js'
+import { keepBands } from '../lib/bandFilter.js'
 
 /**
  * The flagship: one row per player, banded by how many serves that player
@@ -18,10 +19,13 @@ import { posteriorBoxes, boxMarks } from './posteriorBoxes.js'
  *   2  + partial pooling, segments -- "partial pooling moves each one"
  *   3  + band emphasis             -- "and it moves the sparse ones furthest"
  *   4  + truth                     -- "was it right?"
+ *
+ * `bands` is the reader's filter on observation count: an array of n_train
+ * values to draw, or null for everyone. A hidden band loses its facet too.
  */
 export function playerRows ({
   scenario, index, tokens, scale, difficulty, step = 4, view = 'point',
-  layers = {}, selectedPlayer, onSelect, width = 760, maxHeight = null
+  layers = {}, bands = null, selectedPlayer, onSelect, width = 760, maxHeight = null
 }) {
   // A layer is drawn when the reader has it enabled AND the scroll step has
   // reached it. The step controls the reveal; the toggle controls what is
@@ -45,7 +49,7 @@ export function playerRows ({
     ? scenario.population.overall_mean
     : plogis(scenario.population.overall_mean - difficulty)
 
-  const rows = truth.map((t) => {
+  const rows = keepBands(truth, bands).map((t) => {
     const np = noPool.get(t.child_id)
     const pp = partial.get(t.child_id)
     return {
@@ -87,11 +91,12 @@ export function playerRows ({
     ? 'Latent ability θ'
     : `Return probability at serve difficulty d* = ${difficulty.toFixed(2)}`
 
-  const bands = [...new Set(rows.map((d) => d.band))]
+  const bandLabels = [...new Set(rows.map((d) => d.band))]
     .sort((a, b) => parseInt(a) - parseInt(b))
 
-  // Step 3 walks the bands one at a time, sparsest first.
-  const emphasisBand = step === 3 ? bands[Math.min(bands.length - 1, 0)] : null
+  // Step 3 lights the sparsest band SHOWN and dims the rest. If the reader has
+  // hidden the five-serve players, the next band up is the one that stands out.
+  const emphasisBand = step === 3 ? bandLabels[0] : null
   const dim = (d) => (emphasisBand && d.band !== emphasisBand ? 0.18 : 1)
 
   const marks = [
@@ -217,7 +222,7 @@ export function playerRows ({
   //
   // `maxHeight` comes from the section, which knows what the rail, legend and
   // caption are costing. The fallback keeps jsdom deterministic.
-  const ideal = 30 * bands.length + 19 * rows.length
+  const ideal = 30 * bandLabels.length + 19 * rows.length
   const ceiling = maxHeight ?? 640
   const height = Math.max(460, Math.min(ideal, ceiling))
 
@@ -247,7 +252,7 @@ export function playerRows ({
       axis: null
     },
     fy: {
-      domain: bands,
+      domain: bandLabels,
       label: null,
       axis: 'left'
     },
