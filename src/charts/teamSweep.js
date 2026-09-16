@@ -345,8 +345,9 @@ export function orderedTeams ({
     )
   }
 
-  // The walk-through team, on top: its bar again, heavier, and a ring.
-  if (on('team') && walk.length) {
+  // The walk-through team, on top: its bar again, heavier, and a ring, so the
+  // reader can find the one team the rest of the section follows.
+  if (on('team') && on('walk') && walk.length) {
     marks.push(
       Plot.link(walk, {
         x1: K.lo, x2: K.hi, y1: 'rank', y2: 'rank', fy: 'n_keep',

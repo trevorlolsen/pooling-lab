@@ -128,7 +128,8 @@ export function teamSweep () {
       { id: 'team', label: 'Sample-average interval, contains μ', marker: 'line', color: '#e69f00' },
       { id: 'miss', label: 'Sample-average interval, misses μ', marker: 'line', color: '#d55e00' },
       { id: 'mu', label: 'The same team’s interval for μ', marker: 'line', color: '#56b4e9' },
-      { id: 'truth', label: 'True μ', marker: 'rule', color: '#111' }
+      { id: 'truth', label: 'True μ', marker: 'rule', color: '#111' },
+      { id: 'walk', label: 'The team from the charts above', marker: 'open', color: '#111' }
     ])
     box.teams.innerHTML = ''
     box.teams.appendChild(orderedTeams({
@@ -209,7 +210,8 @@ export function teamSweep () {
     el.querySelector('[data-role="caption-teams"]').textContent =
       `${coverage.n_teams} teams of ${coverage.n_players}, one facet per step, ranked by their posterior sample average. ` +
       `Orange bars contain μ, red bars miss it; blue bars are the same teams' intervals for μ, ` +
-      `offset just below. The ringed bar is the walk-through team.`
+      `offset just below. The ringed bar is the team the charts above follow (seed ${coverage.walk_through_seed ?? sweep.seed}), ` +
+      `so you can watch it settle into its place among the hundred.`
     el.querySelector('[data-role="takeaway-teams"]').innerHTML = `
       A precisely known team average is allowed to miss μ. At ${first} serves
       per player the sample-average interval contains μ for ${pct(s0.team_covers_mu)}
