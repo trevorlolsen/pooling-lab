@@ -71,10 +71,10 @@ export function theTeam () {
     if (!legend) {
       legend = layerLegend(twoD
         ? [
-            { id: 'groups', label: 'Each group', marker: 'area', color: '#0072b2' },
-            { id: 'outline', label: 'Whole population', marker: 'dashed', color: '#475569' },
-            { id: 'group_means', label: 'Group means', marker: 'diamond', color: '#0072b2' },
-            { id: 'players', label: 'The 40 players', marker: 'dot', color: '#64748b' }
+            { id: 'groups', label: 'Each group: 50% and 90% of its players', marker: 'area', color: '#0072b2' },
+            { id: 'outline', label: 'Whole population: 90%', marker: 'dashed', color: '#475569' },
+            { id: 'group_means', label: 'True group means', marker: 'diamond', color: '#0072b2' },
+            { id: 'players', label: 'The 40 players on this team', marker: 'dot', color: '#64748b' }
           ]
         : [
             { id: 'groups', label: 'Each group', marker: 'area', color: '#0072b2' },
@@ -102,15 +102,21 @@ export function theTeam () {
     // swapping teams changes forty dots subtly and reads as "nothing happened".
     const s1 = skillLabel(1)
     const s2 = skillLabel(2)
+    // The rings are the population's own truth -- fixed for a preset, so they
+    // hold still when the team changes and only the dots move. Say so, or a
+    // reader reasonably takes the inner ring for something about this team.
     const base = twoD
       ? (groups.length > 1
-          ? `${s1} runs left to right and ${s2} bottom to top. Each group is a shaded
-             region of that plane and the dashed outline is the whole population you
-             would actually sample from. Dots are the ${players.length} players drawn,
-             each placed at their true ability in both skills.`
-          : `${s1} runs left to right and ${s2} bottom to top. The shaded region is the
-             population you would sample from. Dots are the ${players.length} players
-             drawn, each placed at their true ability in both skills.`)
+          ? `${s1} runs left to right and ${s2} bottom to top. Around each group's true
+             mean, the inner ring encloses 50% of that group's players and the outer
+             ring 90% — the population the group is drawn from, not this team, so they
+             stay put when you switch teams. The dashed outline is 90% of the whole
+             population. Dots are the ${players.length} players actually drawn, each at
+             their true ability in both skills.`
+          : `${s1} runs left to right and ${s2} bottom to top. The inner ring encloses
+             50% of the population and the outer ring 90% — the population itself, so
+             they stay put when you switch teams. Dots are the ${players.length} players
+             actually drawn, each at their true ability in both skills.`)
       : groups.length > 1
         ? `Each group is shaded in its own colour and the two stack up to the dark
            outline, which is the population you would actually sample from. Dots are
