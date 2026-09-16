@@ -3,8 +3,9 @@ import { armEstimates, truthValues, plogis } from '../lib/transforms.js'
 import { posteriorBoxes, boxMarks } from './posteriorBoxes.js'
 
 /**
- * The flagship: one row per player, banded by how many observations that player
- * has, showing where each model puts them.
+ * The flagship: one row per player, banded by how many serves that player
+ * has, showing where each model puts them. This chart is 1D-only, so the unit
+ * is always "serves"; the 2D sibling (playerEllipses) says "plays".
  *
  * The segment from the no-pooling estimate to the partial-pooling estimate IS
  * the shrinkage. Players with less information have visibly longer segments --
@@ -50,7 +51,7 @@ export function playerRows ({
     return {
       child_id: t.child_id,
       n_train: t.n_train,
-      band: `${t.n_train} observations`,
+      band: `${t.n_train} serves`,
       truth: t.truth_value,
       no_pool: np?.estimate,
       partial: pp?.estimate,
@@ -153,7 +154,7 @@ export function playerRows ({
       strokeWidth: 1.6,
       fill: 'none',
       opacity: dim,
-      title: (d) => `Player ${d.child_id} — ${d.n_train} observations\nNo pooling: ${d.no_pool?.toFixed(3)}`
+      title: (d) => `Player ${d.child_id} — ${d.n_train} serves\nNo pooling: ${d.no_pool?.toFixed(3)}`
     })
   )
 
@@ -165,7 +166,7 @@ export function playerRows ({
         r: 4,
         fill: tokens.get('none').color,
         opacity: dim,
-        title: (d) => `Player ${d.child_id} — ${d.n_train} observations\n` +
+        title: (d) => `Player ${d.child_id} — ${d.n_train} serves\n` +
           `Partial pooling: ${d.partial?.toFixed(3)}\nMoved ${d.shrinkage.toFixed(3)}`
       })
     )
@@ -196,12 +197,16 @@ export function playerRows ({
     )
   }
 
-  // Selection ring, drawn last so it sits on top.
+  // Selection ring, drawn last so it sits on top. It follows the partial
+  // estimate once that is drawn, and the no-pooling estimate before then --
+  // otherwise at steps 0 and 1 the ring circles an empty spot on the axis.
   const selected = rows.filter((d) => d.selected)
   if (selected.length) {
+    const showPartial = on('partial', 2)
     marks.push(
       Plot.dot(selected, {
-        x: 'partial', y: 'rank', r: 8, stroke: '#111', strokeWidth: 1.5, fill: 'none'
+        x: showPartial ? 'partial' : 'no_pool',
+        y: 'rank', r: 8, stroke: '#111', strokeWidth: 1.5, fill: 'none'
       })
     )
   }
@@ -220,7 +225,7 @@ export function playerRows ({
     width,
     height,
     // Band labels live in the left margin, so it has to be wide enough for
-    // "30 observations". The y axis is hidden, so this space is otherwise idle
+    // "30 serves". The y axis is hidden, so this space is otherwise idle
     // -- and a label you read before the data beats one you read after it.
     marginLeft: 120,
     marginRight: 16,

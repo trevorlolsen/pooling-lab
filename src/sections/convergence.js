@@ -66,17 +66,22 @@ export function convergence () {
   function renderCharts () {
     if (!legend) {
       legend = layerLegend(is2dPayload()
+        // Swatches match what is drawn: in 2D the no-pooling posterior is an
+        // open ring, the partial-pooling one a filled ellipse, and the pooling
+        // target a filled grey dot per cell. In 1D the target is a dashed line
+        // and the interval layer draws BOTH models' 90% bands, each in its own
+        // colour, so the label says so.
         ? [
-            { id: 'no_pool', label: 'What their own serves say', marker: 'open', color: '#e69f00' },
-            { id: 'partial', label: 'Where the model put them', marker: 'dot', color: '#56b4e9' },
-            { id: 'target', label: 'The team average', marker: 'dashed', color: '#94a3b8' },
+            { id: 'no_pool', label: 'No pooling — their own plays alone', marker: 'open', color: '#e69f00' },
+            { id: 'partial', label: 'Partial pooling — where the model put them', marker: 'area', color: '#56b4e9' },
+            { id: 'target', label: 'Estimated population mean μ — what the model pulls toward', marker: 'dot', color: '#94a3b8' },
             { id: 'truth', label: 'Their true ability', marker: 'times', color: '#009e73' }
           ]
         : [
-            { id: 'no_pool', label: 'What their own serves say', marker: 'open', color: '#e69f00' },
-            { id: 'partial', label: 'Where the model put them', marker: 'dot', color: '#56b4e9' },
-            { id: 'interval', label: '90% intervals', marker: 'area', color: '#56b4e9' },
-            { id: 'target', label: 'The team average', marker: 'dashed', color: '#94a3b8' },
+            { id: 'no_pool', label: 'No pooling — their own serves alone', marker: 'open', color: '#e69f00' },
+            { id: 'partial', label: 'Partial pooling — where the model put them', marker: 'dot', color: '#56b4e9' },
+            { id: 'interval', label: '90% intervals (both models, in their colours)', marker: 'area', color: '#56b4e9' },
+            { id: 'target', label: 'Estimated population mean μ — what the model pulls toward', marker: 'dashed', color: '#94a3b8' },
             { id: 'truth', label: 'Their true ability', marker: 'line', color: '#009e73' }
           ], () => renderCharts())
       el.querySelector('[data-role="legend"]').appendChild(legend.el)
@@ -135,7 +140,9 @@ export function convergence () {
     el.querySelector('[data-role="caption"]').textContent =
       `${payload.focal.length} players, each swept from ${first} to ${last} serves ` +
       `while the other ${payload.n_players - payload.focal.length} players keep all of theirs. ` +
-      `The datasets are nested, so every step adds serves to the same player.`
+      `The datasets are nested, so every step adds serves to the same player. ` +
+      `The dashed grey line is the estimated population mean μ; it shifts a little as this player's data changes the team fit. ` +
+      `Always on the ability scale; the Scale and Show controls do not apply here.`
 
     el.querySelector('[data-role="takeaway"]').innerHTML = `
       On one serve, player <strong class="figures">${lead.focal_id}</strong>'s own data
@@ -213,7 +220,10 @@ export function convergence () {
     el.querySelector('[data-role="caption"]').textContent =
       `${payload.focal.length} players, each swept from ${first} to ${last} plays in both skills ` +
       `while the other ${payload.n_players - payload.focal.length} players keep all of theirs. ` +
-      `The datasets are nested, so every step adds plays to the same player.`
+      `The datasets are nested, so every step adds plays to the same player. ` +
+      `Each ring is the 50% region of that model's posterior; the axes are the same in every cell. ` +
+      `The grey dot is the estimated population mean μ; it shifts a little as this player's data changes the team fit. ` +
+      `Always on the ability scale; the Scale and Show controls do not apply here.`
 
     el.querySelector('[data-role="takeaway"]').innerHTML = `
       On one play, player <strong class="figures">${lead.focal_id}</strong>'s own data
@@ -236,8 +246,8 @@ export function convergence () {
       <strong>Same person, same true abilities. Only the evidence changed.</strong>`
 
     el.querySelector('[data-role="pull-caption"]').textContent =
-      'Each line is one player: how much of the plane their own-data posterior still covers. ' +
-      'Lower means their own plays pin them down more tightly.'
+      'Two lines per player: orange dashed is how much of the plane their own-data posterior still covers, blue is partial pooling\'s. ' +
+      'The gap between them is the information the model borrowed, and it closes as the player is watched longer.'
 
     // The pull per skill, and the area, both from first to last step.
     const collapse = (k) => Math.min(...payload.focal.map((f) => {

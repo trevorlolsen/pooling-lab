@@ -39,6 +39,11 @@ export function theTeam () {
 
   const chart = el.querySelector('[data-role="chart"]')
   let legend = null
+  // How many groups the current legend was built for. The population switcher
+  // can move between one group and two without remounting the section, and
+  // the one-group legend has fewer entries, so the legend is rebuilt when this
+  // changes.
+  let legendGroups = 0
 
   function render () {
     const { scenario, index } = state
@@ -49,48 +54,78 @@ export function theTeam () {
     const players = zip(scenario.truth)
     const bands = [...new Set(players.map((p) => p.n_train))].sort((a, b) => a - b)
     const groups = zip(pop.groups)
+    const grouped = groups.length > 1
+    // Skill 2 is Reception, so the unit of data is a "play" once there are two
+    // skills; the 1D story is about serves alone.
+    const unit = twoD ? 'plays' : 'serves'
     // In 2D every population summary is a pair; the headline only needs one
     // verdict, and the two skills share the same separation by construction.
     const bimodal = twoD ? pop.bimodal[0] : pop.bimodal
 
     el.querySelector('[data-role="headline"]').textContent = bimodal
       ? 'These players come from two genuinely different groups'
-      : groups.length > 1
+      : grouped
         ? 'These players carry a group label — but the groups barely differ'
         : 'These players are a sample from one population'
 
     el.querySelector('[data-role="lede"]').innerHTML = `
-      ${players.length} players, drawn from ${groups.length > 1
+      ${players.length} players, drawn from ${grouped
         ? `a population made of ${groups.length} groups`
         : 'a single population'}.
-      We watched them unequal numbers of times: ${bands.join(', ')} serves each.
+      We watched them unequal numbers of times: ${bands.join(', ')} ${unit} each.
       That difference is the whole reason this is interesting.`
 
     // The section is remounted when the dimension changes, so this closure is
     // fresh and the legend is rebuilt with the right markers for the chart.
-    if (!legend) {
-      legend = layerLegend(twoD
+    // Within a mount it is rebuilt only when the group count changes, carrying
+    // the reader's toggles across so a population switch does not reset them.
+    if (!legend || legendGroups !== groups.length) {
+      const previous = legend ? legend.get() : {}
+      const was = (id) => previous[id] !== false
+      // The dots take their group's colour when there are groups, and the
+      // swatch cannot show two colours at once -- so the label says so.
+      const playersLabel = grouped
+        ? `The ${players.length} players on this team, in their group's colour`
+        : `The ${players.length} players on this team`
+      // With one group there is nothing for the group layers to draw, and in
+      // 2D the dashed 90% outline coincides with the grey 90% ring, so those
+      // entries would be dead toggles: omit them.
+      const items = twoD
         ? [
-            { id: 'groups', label: 'Each group: 50% and 90% of its players', marker: 'area', color: '#0072b2' },
-            { id: 'outline', label: 'Whole population: 90%', marker: 'dashed', color: '#475569' },
-            { id: 'group_means', label: 'True group means', marker: 'diamond', color: '#0072b2' },
-            { id: 'players', label: 'The 40 players on this team', marker: 'dot', color: '#64748b' }
+            ...(grouped ? [
+              { id: 'groups', label: 'Each group: 50% and 90% of its players, in its own colour', marker: 'area', color: '#0072b2', on: was('groups') },
+              { id: 'outline', label: 'Whole population: 90%', marker: 'dashed', color: '#475569', on: was('outline') },
+              { id: 'group_means', label: 'True group means', marker: 'diamond', color: '#0072b2', on: was('group_means') }
+            ] : []),
+            { id: 'players', label: playersLabel, marker: 'dot', color: '#64748b', on: was('players') }
           ]
         : [
-            { id: 'groups', label: 'Each group', marker: 'area', color: '#0072b2' },
-            { id: 'outline', label: 'Whole population', marker: 'line', color: '#475569' },
-            { id: 'group_means', label: 'Group means', marker: 'rule', color: '#0072b2' },
-            { id: 'players', label: 'The 40 players', marker: 'dot', color: '#64748b' }
-          ], () => render())
-      el.querySelector('[data-role="legend"]').appendChild(legend.el)
+            ...(grouped ? [
+              { id: 'groups', label: 'Each group, in its own colour', marker: 'area', color: '#0072b2', on: was('groups') }
+            ] : []),
+            { id: 'outline', label: 'Whole population', marker: 'line', color: '#475569', on: was('outline') },
+            ...(grouped ? [
+              { id: 'group_means', label: 'True group means', marker: 'rule', color: '#0072b2', on: was('group_means') }
+            ] : []),
+            { id: 'players', label: playersLabel, marker: 'dot', color: '#64748b', on: was('players') }
+          ]
+      const host = el.querySelector('[data-role="legend"]')
+      host.innerHTML = ''
+      legend = layerLegend(items, () => render())
+      legendGroups = groups.length
+      host.appendChild(legend.el)
     }
+    const layers = legend.get()
+    // On a grouped population with the group fill hidden, the chart falls back
+    // to one grey shape for the mixture -- the caption has to say what that is.
+    const groupsHidden = grouped && layers.groups === false
 
     const draw = twoD ? populationContours : populationDensity
     chart.innerHTML = ''
     chart.appendChild(draw({
       scenario,
       index,
-      layers: legend.get(),
+      layers,
       // Null until clicked, matching section 2: an outline on player 1 that
       // nobody chose reads as a bug, not a highlight.
       selectedPlayer: state.selectedPlayer,
@@ -105,26 +140,42 @@ export function theTeam () {
     // The rings are the population's own truth -- fixed for a preset, so they
     // hold still when the team changes and only the dots move. Say so, or a
     // reader reasonably takes the inner ring for something about this team.
+    // The 2D chart has no rows to carry the information bands, so it carries
+    // them in the dot size instead; the sentence quotes the bands actually
+    // simulated rather than a typed-in ladder.
+    const sizes = `Bigger dots were watched more: ${bands.join(', ')} ${unit} each.`
+    const select = 'Click a player to follow them through the story; the black ring marks your choice.'
     const base = twoD
-      ? (groups.length > 1
-          ? `${s1} runs left to right and ${s2} bottom to top. Around each group's true
+      ? (groupsHidden
+          ? `${s1} runs left to right and ${s2} bottom to top. With the groups hidden,
+             the grey shape is the whole population: the inner ring encloses 50% of it
+             and the outer ring 90% — the population itself, not this team, so they
+             stay put when you switch teams. Dots are the ${players.length} players
+             actually drawn, each at their true ability in both skills, in grey while
+             their groups are hidden. ${sizes}`
+          : grouped
+            ? `${s1} runs left to right and ${s2} bottom to top. Around each group's true
              mean, the inner ring encloses 50% of that group's players and the outer
              ring 90% — the population the group is drawn from, not this team, so they
              stay put when you switch teams. The dashed outline is 90% of the whole
              population. Dots are the ${players.length} players actually drawn, each at
-             their true ability in both skills.`
-          : `${s1} runs left to right and ${s2} bottom to top. The inner ring encloses
+             their true ability in both skills. ${sizes}`
+            : `${s1} runs left to right and ${s2} bottom to top. The inner ring encloses
              50% of the population and the outer ring 90% — the population itself, so
              they stay put when you switch teams. Dots are the ${players.length} players
-             actually drawn, each at their true ability in both skills.`)
-      : groups.length > 1
-        ? `Each group is shaded in its own colour and the two stack up to the dark
+             actually drawn, each at their true ability in both skills. ${sizes}`)
+      : groupsHidden
+        ? `With the groups hidden, the grey shape is the whole population — the one you
+           would actually sample from. Dots are the ${players.length} players drawn, in
+           rows by how often we watched them, in grey while their groups are hidden.`
+        : grouped
+          ? `Each group is shaded in its own colour and the two stack up to the dark
            outline, which is the population you would actually sample from. Dots are
            the ${players.length} players drawn, in rows by how often we watched them.`
-        : `Shaded: the population you would sample from. Dots are the
+          : `Shaded: the population you would sample from. Dots are the
            ${players.length} players drawn, in rows by how often we watched them.`
     el.querySelector('[data-role="caption"]').innerHTML =
-      `<strong>${teamLabel()}</strong> — ${base} Every team is a fresh draw from the same population.`
+      `<strong>${teamLabel()}</strong> — ${base} ${select} Every team is a fresh draw from the same population.`
 
     el.querySelector('[data-role="takeaway"]').innerHTML = twoD
       ? takeaway2d(pop, groups, bimodal, s1, s2)
@@ -167,9 +218,15 @@ export function theTeam () {
 
     // Group sizes are exact shares of the team dealt out in a random order,
     // not a coin flip per player -- allocate_group_counts() in R/simulation.R.
+    // Name the covariate here, because this is the word the later sections'
+    // legends lean on ("Partial pooling + Experience") without redefining it.
+    const covariateName = grouped && pop.covariate_name
+      ? ` The group label is called <em>${pop.covariate_name}</em>
+         (levels: ${groups.map((g) => g.group).join(', ')}).`
+      : ''
     const groupStep = grouped
       ? `The ${players.length} players are dealt into their true groups in a random order,
-         ${groups.map((g) => `${share(g.weight)} <em>${g.group}</em>`).join(' and ')}.
+         ${groups.map((g) => `${share(g.weight)} <em>${g.group}</em>`).join(' and ')}.${covariateName}
          Each player's ability is then drawn around their group's mean —
          <span class="figures">${model}</span>.`
       : `There are no groups. Each of the ${players.length} players' ability is drawn

@@ -25,6 +25,14 @@ export function populationContours ({
   const hasGroups = groups.length > 1
   const showGroups = hasGroups && on('groups')
 
+  // The 1D chart lays players out in rows by how often they were watched. The
+  // plane has no spare axis for that, so the information band goes into the
+  // dot size instead: one step per distinct count, 2.5 px for the least
+  // watched. Without it the plot would drop the one variable this section is
+  // about.
+  const bands = [...new Set(players.map((p) => p.n_train))].sort((a, b) => a - b)
+  const radiusFor = (n) => 2.5 + 1.2 * bands.indexOf(n)
+
   const shapeOf = (g) => ({ mean1: g.theta_mean_1, mean2: g.theta_mean_2, ...sigma })
   const marginal = mixtureCovariance(groups, sigma)
   const levels = [
@@ -94,12 +102,12 @@ export function populationContours ({
     marks.push(
       Plot.dot(players, {
         x: 'theta1_true', y: 'theta2_true',
-        r: 4,
+        r: (d) => radiusFor(d.n_train),
         fill: showGroups ? 'true_group' : '#64748b',
         fillOpacity: 0.8,
         stroke: (d) => (d.child_id === selectedPlayer ? '#111' : 'none'),
         strokeWidth: 1.5,
-        title: (d) => `Player ${d.child_id}\n${d.n_train} training observations\n` +
+        title: (d) => `Player ${d.child_id}\n${d.n_train} training plays\n` +
           `True ability (${d.theta1_true.toFixed(2)}, ${d.theta2_true.toFixed(2)})` +
           (hasGroups ? `\nGroup: ${d.true_group}` : '')
       })
@@ -113,6 +121,10 @@ export function populationContours ({
     ...squareBox({ width, height, marginLeft: 56, marginRight: 18, marginTop: 12, marginBottom: 42 }),
     x: { label: `${labels[0]} ability θ₁`, domain, grid: true },
     y: { label: `${labels[1]} ability θ₂`, domain, grid: true },
+    // A function-valued r goes through Plot's sqrt radius scale by default,
+    // which would squash the four band sizes together; radiusFor already
+    // returns pixels.
+    r: { type: 'identity' },
     color: {
       domain: groups.map((g) => g.group),
       // Okabe-Ito, matched to the arm palette so group identity never collides

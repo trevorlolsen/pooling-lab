@@ -104,7 +104,7 @@ for (const p of index.populations) {
       shift: absoluteX(t),
       anchor: inheritedAnchor(t)
     }))
-    .filter((t) => /observations$/.test(t.text))
+    .filter((t) => /(observations|serves|plays)$/.test(t.text))
 
   ok(labels.length >= 4, `expected one label per information band, found ${labels.length}`)
   for (const l of labels) {

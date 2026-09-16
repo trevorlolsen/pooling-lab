@@ -164,7 +164,7 @@ export function borrowingSplit ({
         x: 'no_pool', y: 'rank',
         r: 4, fill: 'none',
         stroke: tokens.get('no_pool').color, strokeWidth: 1.6,
-        title: (d) => `Player ${d.child_id} — ${d.n_train} observations\n` +
+        title: (d) => `Player ${d.child_id} — ${d.n_train} serves\n` +
           `Assigned group: ${d.group}\nTrue group: ${d.true_group}\n` +
           `No pooling: ${d.no_pool?.toFixed(3)}`
       })
@@ -172,12 +172,26 @@ export function borrowingSplit ({
   }
 
   if (on('pooled')) {
+    // A player sitting in a panel that is not their true group gets an open
+    // dot rather than a filled one -- the visual counterpart of the lede's
+    // "N of 40 keep their real group". The `mismatch` legend entry toggles the
+    // distinction; with it off, everyone is drawn filled.
+    const flag = on('mismatch')
+    const pooledTitle = (d) => `Player ${d.child_id}\nPulled toward ${d.group} (${d.target?.toFixed(3)})\n` +
+      `Estimate: ${d.pooled?.toFixed(3)}` +
+      (d.matches ? '' : `\nAssigned to ${d.group}, truly ${d.true_group}`)
+    // Filtered arrays are not the facet data, so each carries its own `fy`;
+    // otherwise Plot repeats them in every panel (CLAUDE.md, "Charts").
     marks.push(
-      Plot.dot(rows, {
-        x: 'pooled', y: 'rank',
+      Plot.dot(rows.filter((d) => d.matches || !flag), {
+        x: 'pooled', y: 'rank', fy: 'group',
         r: 4, fill: armColor,
-        title: (d) => `Player ${d.child_id}\nPulled toward ${d.group} (${d.target?.toFixed(3)})\n` +
-          `Estimate: ${d.pooled?.toFixed(3)}`
+        title: pooledTitle
+      }),
+      Plot.dot(rows.filter((d) => !d.matches && flag), {
+        x: 'pooled', y: 'rank', fy: 'group',
+        r: 4, fill: 'none', stroke: armColor, strokeWidth: 1.8,
+        title: pooledTitle
       })
     )
   }

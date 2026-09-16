@@ -9,10 +9,12 @@ import { ellipseRows, toScale } from '../lib/ellipse.js'
  * One panel per ASSIGNED analysis group. Each panel has its own target -- a
  * diamond with a cross of 90% error bars -- and every player in it is pulled
  * toward that diamond from their own no-pooling estimate. The global target a
- * covariate-free model would have used stays as a faint crosshair in every
- * panel, so the reader can see how far the group means sit from it, and the
- * group's TRUE mean sits alongside as an × so the model's error about the
- * group is visible separately from its error about any player.
+ * covariate-free model would have used stays as a faint blue crosshair in
+ * every panel, so the reader can see how far the group means sit from it, and
+ * the group's TRUE mean sits alongside as a green dashed crosshair -- a
+ * crosshair, not an ×, so it cannot be mistaken for a player's truth -- so the
+ * model's error about the group is visible separately from its error about
+ * any player.
  *
  * Every mark here carries its own data, so every mark sets `fx`; without it
  * Plot repeats the mark in every panel (CLAUDE.md, "Charts").
@@ -140,21 +142,29 @@ export function borrowingSplit2d ({
   }
 
   // The pull itself only means anything when both ends of it are on the chart.
+  // An arrow, as in the ellipse chart, so the direction reads without the dots.
   if (on('no_pool') && on('pooled')) {
     marks.push(
-      Plot.link(rows.filter((d) => d.np1 != null && d.pp1 != null), {
+      Plot.arrow(rows.filter((d) => d.np1 != null && d.pp1 != null), {
         x1: 'np1', y1: 'np2', x2: 'pp1', y2: 'pp2', fx: 'group',
-        stroke: '#9ca3af', strokeWidth: 1.4
+        stroke: '#9ca3af', strokeWidth: 1.4,
+        headLength: 5, insetEnd: 3
       })
     )
   }
 
   if (trueRows.length && on('true_group_mean')) {
+    // Two dashed rules through the group's true mean, one per skill, so it
+    // reads as a reference line like its 1D counterpart and not as a player.
+    const trueTitle = (d) => `${d.group}: true mean ability ${pt(d.true1, d.true2)}`
     marks.push(
-      Plot.dot(trueRows, {
-        x: 'true1', y: 'true2', fx: 'group',
-        symbol: 'times', r: 7, stroke: index.truth_color, strokeWidth: 2.2,
-        title: (d) => `${d.group}: true mean ability ${pt(d.true1, d.true2)}`
+      Plot.ruleX(trueRows, {
+        x: 'true1', fx: 'group',
+        stroke: index.truth_color, strokeWidth: 1.5, strokeDasharray: '2 3', title: trueTitle
+      }),
+      Plot.ruleY(trueRows, {
+        y: 'true2', fx: 'group',
+        stroke: index.truth_color, strokeWidth: 1.5, strokeDasharray: '2 3', title: trueTitle
       })
     )
   }
@@ -184,7 +194,7 @@ export function borrowingSplit2d ({
       Plot.dot(rows, {
         x: 'np1', y: 'np2', fx: 'group',
         r: 4, fill: 'none', stroke: tokens.get('no_pool').color, strokeWidth: 1.6,
-        title: (d) => `Player ${d.child_id} — ${d.n_train} observations\n` +
+        title: (d) => `Player ${d.child_id} — ${d.n_train} plays\n` +
           `Assigned group: ${d.group}\nTrue group: ${d.true_group}\n` +
           `No pooling: ${pt(d.np1, d.np2)}`
       })
@@ -192,12 +202,24 @@ export function borrowingSplit2d ({
   }
 
   if (on('pooled')) {
+    // A player sitting in a panel that is not their true group gets an open
+    // dot rather than a filled one -- the visual counterpart of the lede's
+    // "N of 40 keep their real group". The `mismatch` legend entry toggles the
+    // distinction; with it off, everyone is drawn filled.
+    const flag = on('mismatch')
+    const pooledTitle = (d) => `Player ${d.child_id}\nPulled toward ${d.group}\n` +
+      `Estimate: ${pt(d.pp1, d.pp2)}` +
+      (d.matches ? '' : `\nAssigned to ${d.group}, truly ${d.true_group}`)
     marks.push(
-      Plot.dot(rows, {
+      Plot.dot(rows.filter((d) => d.matches || !flag), {
         x: 'pp1', y: 'pp2', fx: 'group',
         r: 4, fill: armColor,
-        title: (d) => `Player ${d.child_id}\nPulled toward ${d.group}\n` +
-          `Estimate: ${pt(d.pp1, d.pp2)}`
+        title: pooledTitle
+      }),
+      Plot.dot(rows.filter((d) => !d.matches && flag), {
+        x: 'pp1', y: 'pp2', fx: 'group',
+        r: 4, fill: 'none', stroke: armColor, strokeWidth: 1.8,
+        title: pooledTitle
       })
     )
   }

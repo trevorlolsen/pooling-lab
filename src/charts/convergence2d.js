@@ -66,7 +66,7 @@ export function convergenceTracks2d ({ payload, layers = {}, width = 760, height
       Plot.dot(cells, {
         x: (c) => c.target.x, y: (c) => c.target.y, fx: 'n_keep', fy: 'facet',
         r: 3, fill: '#94a3b8',
-        title: (c) => `${c.facet}, ${c.n_keep} serves\nPopulation target (${c.target.x.toFixed(2)}, ${c.target.y.toFixed(2)})`
+        title: (c) => `${c.facet}, ${c.n_keep} plays\nEstimated population mean μ (${c.target.x.toFixed(2)}, ${c.target.y.toFixed(2)})`
       })
     )
   }
@@ -94,7 +94,7 @@ export function convergenceTracks2d ({ payload, layers = {}, width = 760, height
     // reduced to one label per skill, and every cell shares the same domain.
     x: { domain: xDomain, ticks: [], label: `${labels[0]} ability θ₁ →`, labelAnchor: 'center' },
     y: { domain: yDomain, ticks: [], label: `${labels[1]} ability θ₂ →`, labelAnchor: 'center' },
-    fx: { domain: steps, label: 'Serves we have watched this player →', tickFormat: (d) => `${d}`, axis: 'top' },
+    fx: { domain: steps, label: 'Plays we have watched this player →', tickFormat: (d) => `${d}`, axis: 'top' },
     fy: { domain: focals, label: null, axis: 'left' },
     facet: { data: cells, x: 'n_keep', y: 'facet' },
     style: { fontSize: '12px', background: 'transparent' },
@@ -129,7 +129,7 @@ export function convergenceArea2d ({ payload, width = 760, height = 260 }) {
     marginBottom: 44,
     x: {
       type: 'log',
-      label: 'Serves we have watched this player →',
+      label: 'Plays we have watched this player →',
       domain: [Math.min(...steps) * 0.9, last * 1.1],
       ticks: steps,
       tickFormat: (d) => `${d}`,
@@ -151,12 +151,12 @@ export function convergenceArea2d ({ payload, width = 760, height = 260 }) {
       Plot.dot(rows, {
         x: 'n_keep', y: 'no_pool', z: 'facet',
         r: 3, fill: 'none', stroke: '#e69f00', strokeWidth: 1.4,
-        title: (d) => `${d.facet}, ${d.n_keep} serves\nNo pooling: area ${d.no_pool.toFixed(3)}`
+        title: (d) => `${d.facet}, ${d.n_keep} plays\nNo pooling: area ${d.no_pool.toFixed(3)}`
       }),
       Plot.dot(rows, {
         x: 'n_keep', y: 'partial', z: 'facet',
         r: 3.5, fill: '#56b4e9',
-        title: (d) => `${d.facet}, ${d.n_keep} serves\nPartial pooling: area ${d.partial.toFixed(3)}`
+        title: (d) => `${d.facet}, ${d.n_keep} plays\nPartial pooling: area ${d.partial.toFixed(3)}`
       }),
       Plot.text(rows.filter((d) => d.n_keep === last), {
         x: 'n_keep', y: 'partial', text: 'facet',

@@ -17,9 +17,20 @@ import * as Plot from '@observablehq/plot'
  * chart is split into one panel per value of that field and the summary is
  * taken per (arm, band, facet value). Every mark carries the facet channel:
  * a mark with its own data is otherwise drawn in every panel.
+ *
+ * `unit` names one training datum on the axis and in the tooltip: 'serves'
+ * in one skill, 'plays' in two (skill 2 is reception, so "serves" is wrong).
+ *
+ * The two covariate arms share one colour in the design tokens and are told
+ * apart there by symbol: filled diamond for the correct covariate, open for
+ * the scrambled one. A line has no symbol, so the open-diamond arm gets the
+ * line equivalent -- dashed, with open dots. `isDashedArm` is exported so the
+ * legend the section builds can show the same swatch.
  */
+export const isDashedArm = (arm) => arm.id === 'wrong'
+
 export function errorByModel ({
-  rows, metric, scale, arms, layers = {}, facet = null, width = 760, height = 400
+  rows, metric, scale, arms, layers = {}, facet = null, unit = 'serves', width = 760, height = 400
 }) {
   const on = (id) => layers[id] !== false
   // Hiding a model rescales the y axis, which is the point: complete pooling's
@@ -28,6 +39,7 @@ export function errorByModel ({
   if (!visible.length) return Plot.plot({ width, height: 80, marks: [] })
 
   const armIds = visible.map((a) => a.id)
+  const dashedIds = new Set(visible.filter(isDashedArm).map((a) => a.id))
   rows = rows.filter((r) => armIds.includes(r.arm))
   const bands = [...new Set(rows.map((r) => r.n_train))].sort((a, b) => a - b)
   const facets = facet ? [...new Set(rows.map((r) => r[facet]))] : [null]
@@ -57,8 +69,16 @@ export function errorByModel ({
   }
 
   const metricLabel = metric === 'rmse' ? 'RMSE' : 'Mean absolute error'
-  const unit = scale === 'theta' ? 'ability units' : 'probability'
+  const errorUnit = scale === 'theta' ? 'ability units' : 'probability'
   const fx = facet ? { fx: facet } : {}
+  const solid = summary.filter((d) => !dashedIds.has(d.arm))
+  const dashed = summary.filter((d) => dashedIds.has(d.arm))
+  const title = (d) => `${d.label}${facet ? ` — ${d[facet]}` : ''}\n${d.n_train} ${unit} per player\n` +
+    `${metricLabel}: ${d.mean.toFixed(4)}\n` +
+    `across ${d.teams} teams: ${d.lo.toFixed(4)} to ${d.hi.toFixed(4)}`
+  const lineOf = (data, extra = {}) => Plot.line(data, {
+    x: 'n_train', y: 'mean', z: 'arm', stroke: 'arm', strokeWidth: 2.5, curve: 'monotone-x', ...fx, ...extra
+  })
 
   return Plot.plot({
     width,
@@ -68,13 +88,13 @@ export function errorByModel ({
     marginTop: 14,
     marginBottom: 46,
     x: {
-      label: 'Training observations per player',
+      label: `Training ${unit} per player`,
       type: 'point',
       domain: bands,
       grid: true
     },
     y: {
-      label: `${metricLabel} against truth (${unit})`,
+      label: `${metricLabel} against truth (${errorUnit})`,
       zero: true,
       grid: true,
       nice: true
@@ -99,25 +119,19 @@ export function errorByModel ({
         curve: 'monotone-x',
         ...fx
       })] : []),
-      Plot.line(summary, {
-        x: 'n_train',
-        y: 'mean',
-        z: 'arm',
-        stroke: 'arm',
-        strokeWidth: 2.5,
-        curve: 'monotone-x',
-        ...fx
-      }),
-      Plot.dot(summary, {
-        x: 'n_train',
-        y: 'mean',
-        fill: 'arm',
-        r: 4,
-        ...fx,
-        title: (d) => `${d.label}${facet ? ` — ${d[facet]}` : ''}\n${d.n_train} observations per player\n` +
-          `${metricLabel}: ${d.mean.toFixed(4)}\n` +
-          `across ${d.teams} teams: ${d.lo.toFixed(4)} to ${d.hi.toFixed(4)}`
-      })
+      // Mean across teams: solid with filled dots, except the scrambled
+      // covariate, which shares the correct covariate's colour and is dashed
+      // with open dots so the two can be told apart without hovering.
+      ...(solid.length ? [
+        lineOf(solid),
+        Plot.dot(solid, { x: 'n_train', y: 'mean', fill: 'arm', r: 4, ...fx, title })
+      ] : []),
+      ...(dashed.length ? [
+        lineOf(dashed, { strokeDasharray: '5 3' }),
+        Plot.dot(dashed, {
+          x: 'n_train', y: 'mean', fill: 'none', stroke: 'arm', strokeWidth: 1.8, r: 4, ...fx, title
+        })
+      ] : [])
     ]
   })
 }

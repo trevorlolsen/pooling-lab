@@ -15,13 +15,15 @@ import { zip, plogis } from '../lib/transforms.js'
  *   coverageCurves  how often each interval contains μ, against n
  *
  * Colours are fixed here rather than read from the arm tokens: none of these
- * three quantities is an "arm" in the index. Okabe–Ito throughout.
+ * three quantities is an "arm" in the index. Okabe–Ito throughout, avoiding
+ * the green the rest of the site reserves for truth: the unseen player is a
+ * prediction, not a truth.
  */
 
 const COLOR = {
   team: '#e69f00',
   mu: '#56b4e9',
-  new: '#009e73',
+  new: '#cc79a7',
   miss: '#d55e00',
   naive: '#6b7280',
   truth: '#111111',
@@ -47,9 +49,11 @@ const xSteps = (steps, label = 'Serves per player →') => ({
   grid: true
 })
 
+// Everything here is read from a frame precomputed at d* = 0, so the label
+// says so rather than echoing a slider value this section does not follow.
 const xLabelFor = (scale) => scale === 'theta'
   ? 'Latent ability θ'
-  : 'Return probability at serve difficulty d* = 0.00'
+  : 'Return probability at d* = 0 (fixed for this section)'
 
 /**
  * 90% interval width against n, for the sample average, μ and a new player.
@@ -339,9 +343,13 @@ export function orderedTeams ({
     )
   }
 
+  // Dashed, as in the ridges above: the same rule should look the same.
   if (on('truth')) {
     marks.push(
-      Plot.ruleX(muRows, { x: 'mu', fy: 'n_keep', stroke: COLOR.truth, strokeWidth: 1.4 })
+      Plot.ruleX(muRows, {
+        x: 'mu', fy: 'n_keep', stroke: COLOR.truth, strokeWidth: 1.4, strokeDasharray: '4 3',
+        title: () => `True population mean μ = ${coverage.truth.mu.toFixed(2)}`
+      })
     )
   }
 
@@ -389,7 +397,8 @@ export function orderedTeams ({
 
 /**
  * How often each 90% interval contains μ, across the 100 teams, against n.
- * Wilson 95% bounds as faint bands; the nominal 90% as a dashed rule.
+ * Wilson 95% bounds as faint bands (the `band` layer, in each series' colour);
+ * the nominal 90% as a dashed rule.
  */
 export function coverageCurves ({ coverage, width = 760, height = 320, layers = {} }) {
   const on = (id) => layers[id] !== false
@@ -414,10 +423,10 @@ export function coverageCurves ({ coverage, width = 760, height = 320, layers = 
     const k = `${id}_covers_mu`
     if (rows[0][k] == null) continue
     marks.push(
-      Plot.areaY(rows, {
+      ...(on('band') ? [Plot.areaY(rows, {
         x: 'n_keep', y1: `${k}_low`, y2: `${k}_high`,
         fill: COLOR[id], fillOpacity: 0.12, curve: 'monotone-x'
-      }),
+      })] : []),
       Plot.line(rows, {
         x: 'n_keep', y: k, stroke: COLOR[id], strokeWidth: 2.5, curve: 'monotone-x'
       }),

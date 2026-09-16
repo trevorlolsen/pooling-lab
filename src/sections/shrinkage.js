@@ -14,43 +14,122 @@ import { layerLegend } from '../lib/layers.js'
  * same 40 rows mean something different at each step, and re-rendering the chart
  * per step is what makes the movement legible.
  */
+/**
+ * Step prose. `body` is the one-skill text. In two skills a step may supply
+ * `body2d`, which REPLACES `body` (the 2D chart draws different marks, so the
+ * sentences that name them have to change), or `append2d`, which is added after
+ * `body` (the 1D sentence still holds and the 2D one extends it).
+ */
 const STEPS = [
   {
     lede: 'Trust each player, and only that player.',
     body: `No pooling estimates every player from their own serves alone. The
            player you watched five times gets an estimate built from five serves —
+           and it is all over the place.`,
+    body2d: `No pooling estimates every player from their own plays alone. The
+           player you watched five times gets an estimate built from five plays —
            and it is all over the place.`
   },
   {
     lede: 'Or trust nobody in particular.',
     body: `Complete pooling goes the other way: one number for the whole team.
            Nobody is special, so nobody is wrong in an interesting way. The dashed
-           line is where it puts everyone.`
+           line is where it puts everyone.`,
+    body2d: `Complete pooling goes the other way: one point for the whole team.
+           Nobody is special, so nobody is wrong in an interesting way. The diamond
+           where the dashed lines cross is where it puts everyone.`
   },
   {
-    lede: 'Partial pooling moves each player toward the team.',
-    body: `Now every player gets pulled from their own estimate toward what the
-           team suggests. The grey segment is that pull — the distance the model
-           decided to move them.`,
+    lede: 'Partial pooling moves each player toward the estimated population mean.',
+    body: `Now every player gets pulled from their own estimate toward the
+           estimated population mean μ. The grey segment is that pull — the
+           distance the model decided to move them.`,
     // In two skills the pull has a direction as well as a length.
-    body2d: ` In two skills the pull is a vector — it points toward the team
-           average in the plane.`
+    append2d: ` In two skills the pull is a vector — the grey arrow points toward
+           the estimated population mean μ in the plane.`
   },
   {
     lede: 'And it moves the sparse ones furthest.',
     body: `This is the part that matters. The segments are long at the top, where
-           players have five observations, and short at the bottom, where they
-           have thirty. Nobody told the model to do that.`
+           players have five serves, and short at the bottom, where they have
+           thirty. Nobody told the model to do that. The other bands are dimmed so
+           the five-serve players stand out.`,
+    body2d: `This is the part that matters. The lit points are the players watched
+           five times; everyone else is dimmed. Their arrows are the longest —
+           nobody told the model that.`
   },
   {
     lede: 'So was it right?',
     body: `Here is the truth we simulated from. Watch which estimate ends up
-           closer — and notice it is not uniformly one model.`
+           closer — and notice it is not uniformly one model. The green dashed
+           line is the true population mean μ, which complete pooling was aiming
+           at.`,
+    body2d: `Here is the truth we simulated from. Watch which estimate ends up
+           closer — and notice it is not uniformly one model. The green dashed
+           crosshair is the true population mean μ, which complete pooling was
+           aiming at.`
   }
 ]
 
-const CAPTION_1D = 'One row per player, grouped by how many serves we watched. Click any player for their numbers.'
-const CAPTION_2D = 'One point per player; the segment is the pull toward the team, in both skills at once. Click any player for their numbers.'
+/** The prose for one step in the mounted dimension; see the note on STEPS. */
+const stepBody = (s, twoD) => (twoD
+  ? (s.body2d ?? s.body) + (s.append2d ?? '')
+  : s.body)
+
+/**
+ * The caption names every mark the chart can draw: the segment, the selection
+ * ring, the sort order, and -- only when the rail is showing posteriors -- what
+ * a box or ring is. It is rebuilt on every render because the view can change
+ * without a remount.
+ */
+function captionText (twoD, view) {
+  const base = twoD
+    ? 'One point per player, in both skills at once. ' +
+      'The grey arrow is the pull: from what the player\'s own plays say to where the model put them. ' +
+      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart.'
+    : 'One row per player, grouped by how many serves we watched. Rows are sorted by their no-pooling estimate. ' +
+      'The grey segment is the pull: from what the player\'s own serves say to where the model put them. ' +
+      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart.'
+  if (view !== 'posterior') return base
+  return base + (twoD
+    ? ' Each ring encloses 50% of that model\'s posterior; a tilted ring means the model is borrowing across skills.'
+    : ' Box = the middle 50% of that model\'s posterior, whiskers = 90%.')
+}
+
+/**
+ * Legend entries for the mounted dimension and the current view. The swatch
+ * must match the mark: in 2D complete pooling is a diamond on a dashed
+ * crosshair, not a rule; in the posterior view the two estimate layers become
+ * boxes (1D) or filled rings (2D).
+ */
+function legendItems ({ twoD, view, tokens, index }) {
+  const posterior = view === 'posterior'
+  const unit = twoD ? 'plays' : 'serves'
+  return [
+    twoD
+      ? { id: 'complete', label: 'Complete pooling (one point for everyone)', marker: 'diamond', color: tokens.get('complete').color }
+      : { id: 'complete', label: 'Complete pooling (one number for everyone)', marker: 'rule-dashed', color: tokens.get('complete').color },
+    {
+      id: 'no_pool',
+      label: `No pooling — their own ${unit} alone`,
+      marker: posterior ? (twoD ? 'area' : 'box') : 'open',
+      color: tokens.get('no_pool').color
+    },
+    {
+      id: 'partial',
+      label: 'Partial pooling — where the model put them',
+      marker: posterior ? (twoD ? 'area' : 'box') : 'dot',
+      color: tokens.get('none').color
+    },
+    { id: 'truth', label: 'Truth', marker: 'times', color: index.truth_color },
+    {
+      id: 'true_mean',
+      label: twoD ? 'True population mean μ (dashed crosshair)' : 'True population mean μ',
+      marker: 'rule-dashed',
+      color: index.truth_color
+    }
+  ]
+}
 
 export function adaptiveShrinkage () {
   // Read once: a dimension change remounts the section, so the prose can be
@@ -72,14 +151,14 @@ export function adaptiveShrinkage () {
           ${STEPS.map((s, i) => `
             <div class="step" data-step="${i}" data-active="false">
               <p class="step-lede">${s.lede}</p>
-              <p>${s.body}${twoD && s.body2d ? s.body2d : ''}</p>
+              <p>${stepBody(s, twoD)}</p>
             </div>`).join('')}
         </div>
         <div class="scrolly-graphic">
           <figure class="chart-panel">
             <div data-role="legend"></div>
             <div data-role="chart"></div>
-            <figcaption data-role="caption">${twoD ? CAPTION_2D : CAPTION_1D}</figcaption>
+            <figcaption data-role="caption">${captionText(twoD, state.view)}</figcaption>
             <div data-role="posterior-notice"></div>
             <div data-role="detail"></div>
           </figure>
@@ -91,23 +170,28 @@ export function adaptiveShrinkage () {
   const chart = el.querySelector('[data-role="chart"]')
   const stepEls = [...el.querySelectorAll('.step')]
   let legend = null
+  // The view the legend's swatches were drawn for. The legend is built once and
+  // keeps its toggle state in a closure, but its swatches must follow the rail's
+  // Estimates/Posteriors switch -- so it is rebuilt when the view changes, with
+  // the reader's toggles carried across.
+  let legendView = null
   let step = STEPS.length - 1
   let ready = false
 
   function render () {
     const { scenario, index, tokens, scale, difficulty } = state
     if (!scenario) return
-    if (!legend) {
-      const { tokens, index } = state
-      legend = layerLegend([
-        { id: 'complete', label: 'Complete pooling', marker: 'rule-dashed', color: tokens.get('complete').color },
-        { id: 'no_pool', label: 'No pooling', marker: 'open', color: tokens.get('no_pool').color },
-        { id: 'partial', label: 'Partial pooling', marker: 'dot', color: tokens.get('none').color },
-        { id: 'truth', label: 'Truth', marker: 'times', color: index.truth_color },
-        { id: 'true_mean', label: 'True population mean', marker: 'rule-dashed', color: index.truth_color }
-      ], () => render())
-      el.querySelector('[data-role="legend"]').appendChild(legend.el)
+    if (!legend || legendView !== state.view) {
+      const wasOn = legend ? legend.get() : {}
+      const items = legendItems({ twoD, view: state.view, tokens, index })
+        .map((i) => ({ ...i, on: wasOn[i.id] !== false }))
+      legend = layerLegend(items, () => render())
+      legendView = state.view
+      const host = el.querySelector('[data-role="legend"]')
+      host.innerHTML = ''
+      host.appendChild(legend.el)
     }
+    el.querySelector('[data-role="caption"]').textContent = captionText(twoD, state.view)
 
     // The pinned figure has to fit between the rail and the bottom of the
     // window, less the legend and caption sitting around it.
@@ -185,9 +269,11 @@ export function adaptiveShrinkage () {
     }
   }
 
+  // "Further" gets plain ink, not the no-pooling orange: on this page orange
+  // means "No pooling", and a bad move by partial pooling is not that.
   const verdictOf = (better) => better
     ? `<strong style="color:var(--truth)">closer to the truth</strong>`
-    : `<strong style="color:var(--no-pool)">further from the truth</strong>`
+    : `<strong style="color:var(--ink)">further from the truth</strong>`
 
   /**
    * What clicking a player actually buys: their own numbers, and whether the
@@ -213,7 +299,7 @@ export function adaptiveShrinkage () {
       box.innerHTML = `
         <div class="player-detail figures">
           <strong>Player ${id}</strong>
-          <span>${pool.n_train} observations</span>
+          <span>${pool.n_train} serves</span>
           <span>no pooling <b>${pool.no_pool_mean.toFixed(3)}</b></span>
           <span>partial pooling <b>${pool.partial_mean.toFixed(3)}</b></span>
           <span>moved <b>${pool.shrinkage.toFixed(3)}</b></span>
@@ -244,14 +330,18 @@ export function adaptiveShrinkage () {
     box.innerHTML = `
         <div class="player-detail figures">
           <strong>Player ${id}</strong>
-          <span>${a.n_train} observations in each skill</span>
+          <span>${a.n_train} plays in each skill</span>
           ${moved != null ? `<span>moved <b>${moved.toFixed(3)}</b> in the plane</span>` : ''}
         </div>
         ${line(skillLabel(1), a)}
         ${line(skillLabel(2), b)}`
   }
 
-  /** "Players with 5 observations moved 0.061 on average. Players with 30 moved 0.019 — 3.1× less." */
+  // The unit of data in the mounted dimension: skill 2 is Reception, so in two
+  // skills a data point is a "play", not a serve.
+  const unit = twoD ? 'plays' : 'serves'
+
+  /** "Players with 5 serves moved 0.061 on average. Players with 30 moved 0.019 — 3.1× less." */
   function shrinkageSentence (sc, prefix = '') {
     const shrink = zip(sc.derived.shrinkage_by_information)
     if (!shrink.length) return ''
@@ -260,7 +350,7 @@ export function adaptiveShrinkage () {
     const ratio = high.mean_shrinkage > 0
       ? (low.mean_shrinkage / high.mean_shrinkage)
       : null
-    return `${prefix}Players with <strong class="figures">${low.n_train}</strong> observations moved
+    return `${prefix}Players with <strong class="figures">${low.n_train}</strong> ${unit} moved
       <strong class="figures">${low.mean_shrinkage.toFixed(3)}</strong> on average.
       Players with <strong class="figures">${high.n_train}</strong> moved
       <strong class="figures">${high.mean_shrinkage.toFixed(3)}</strong>${
@@ -278,7 +368,7 @@ export function adaptiveShrinkage () {
 
     el.querySelector('[data-role="takeaway"]').innerHTML = `
       ${opening}
-      <strong>The model was never told how many observations anyone had.</strong>
+      <strong>The model was never told how many ${unit} anyone had.</strong>
       It worked that out from how uncertain each player's own data left it.
       <span class="aside">This is one team — one random draw. Use
       <b>${teamLabel()}</b> in the bar above to draw another; the pattern holds in

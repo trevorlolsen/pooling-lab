@@ -45,7 +45,8 @@ export function playerEllipses ({
     return {
       child_id: t.child_id,
       n_train: t.n_train,
-      band: `${t.n_train} observations`,
+      // 2D-only chart: skill 2 is not a serve, so the unit is "plays".
+      band: `${t.n_train} plays`,
       np1: npP?.x, np2: npP?.y,
       pp1: ppP?.x, pp2: ppP?.y,
       t1: tP.x, t2: tP.y,
@@ -140,7 +141,7 @@ export function playerEllipses ({
         r: 4, fill: 'none',
         stroke: tokens.get('no_pool').color, strokeWidth: 1.6,
         opacity: dim,
-        title: (d) => `Player ${d.child_id} — ${d.n_train} observations\nNo pooling: ${pt(d.np1, d.np2)}`
+        title: (d) => `Player ${d.child_id} — ${d.n_train} plays\nNo pooling: ${pt(d.np1, d.np2)}`
       })
     )
   }
@@ -151,7 +152,7 @@ export function playerEllipses ({
         x: 'pp1', y: 'pp2',
         r: 4, fill: tokens.get('none').color,
         opacity: dim,
-        title: (d) => `Player ${d.child_id} — ${d.n_train} observations\n` +
+        title: (d) => `Player ${d.child_id} — ${d.n_train} plays\n` +
           `Partial pooling: ${pt(d.pp1, d.pp2)}\nMoved ${d.shrinkage.toFixed(3)}`
       })
     )
@@ -164,7 +165,7 @@ export function playerEllipses ({
         symbol: 'times', r: 4,
         stroke: index.truth_color, strokeWidth: 2,
         opacity: dim,
-        title: (d) => `Player ${d.child_id} — ${d.n_train} observations\nTruth: ${pt(d.t1, d.t2)}`
+        title: (d) => `Player ${d.child_id} — ${d.n_train} plays\nTruth: ${pt(d.t1, d.t2)}`
       })
     )
   }

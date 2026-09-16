@@ -37,12 +37,19 @@ export function covariateSplit ({ armId, number, eyebrow }) {
 
   const chart = el.querySelector('[data-role="chart"]')
   let legend = null
+  // What the current legend's swatches were drawn for. The legend keeps its
+  // toggle state in a closure, but a box is not a dot and a ring is not a box:
+  // the swatches must follow the rail's Estimates/Posteriors switch and the
+  // One skill/Two skills toggle, so the legend is rebuilt when either changes,
+  // with the reader's toggles carried across.
+  let legendKey = null
 
   function unavailable (message) {
     el.querySelector('[data-role="headline"]').textContent = 'Not available for this population'
     el.querySelector('[data-role="lede"]').textContent = message
     el.querySelector('[data-role="legend"]').innerHTML = ''
     legend = null
+    legendKey = null
     chart.innerHTML = ''
     el.querySelector('[data-role="caption"]').textContent = ''
     el.querySelector('[data-role="takeaway"]').innerHTML = ''
@@ -117,19 +124,42 @@ export function covariateSplit ({ armId, number, eyebrow }) {
               keep their real group, which is about what chance would give.`
            : ''}`
 
-    if (!legend) {
-      legend = layerLegend([
-        { id: 'no_pool', label: 'No pooling', marker: 'open', color: tokens.get('no_pool').color },
-        { id: 'pooled', label: 'Pulled toward the group mean', marker: 'dot',
-          color: tokens.get(armId).color },
-        { id: 'targets', label: 'Estimated group mean', marker: 'rule',
-          color: tokens.get(armId).color },
-        { id: 'true_group_mean', label: 'True mean of this group', marker: 'rule-dashed',
+    // Players whose assigned panel is not their true group. Read from the
+    // payload's overlap block, not recounted here, so the caption quotes the
+    // same number the lede does. Zero for the correct covariate by construction.
+    const mismatched = overlap.n_matching != null ? overlap.n_total - overlap.n_matching : null
+    const posterior = state.view === 'posterior'
+    const unit = twoD ? 'plays' : 'serves'
+
+    const key = `${state.view}|${twoD ? '2d' : '1d'}`
+    if (!legend || legendKey !== key) {
+      const wasOn = legend ? legend.get() : {}
+      const armColor = tokens.get(armId).color
+      // In the posterior view the player layers are boxes (1D) or rings (2D),
+      // and the swatch has to say so.
+      const playerMarker = (point) => (posterior ? (twoD ? 'area' : 'box') : point)
+      const items = [
+        { id: 'no_pool', label: `No pooling — their own ${unit} alone`,
+          marker: playerMarker('open'), color: tokens.get('no_pool').color },
+        { id: 'pooled', label: 'Partial pooling with this grouping',
+          marker: playerMarker('dot'), color: armColor },
+        // Only the scrambled covariate puts anyone in the wrong panel, so only
+        // section 6 gets the entry. It toggles the open-dot distinction; the
+        // players themselves stay on the pooled layer.
+        ...(armId === 'wrong'
+          ? [{ id: 'mismatch', label: 'Assigned to the wrong group', marker: 'open', color: armColor }]
+          : []),
+        twoD
+          ? { id: 'targets', label: 'Estimated group mean, with 90% bars', marker: 'diamond', color: armColor }
+          : { id: 'targets', label: 'Estimated group mean', marker: 'rule', color: armColor },
+        { id: 'true_group_mean', label: 'True group mean', marker: 'rule-dashed',
           color: index.truth_color },
-        { id: 'global_target', label: 'Where no covariate would pull', marker: 'rule-dashed',
-          color: tokens.get('none').color },
+        { id: 'global_target', label: 'Estimated population mean μ — where no covariate would pull',
+          marker: 'rule-dashed', color: tokens.get('none').color },
         { id: 'truth', label: 'Truth', marker: 'times', color: index.truth_color }
-      ], () => render())
+      ].map((i) => ({ ...i, on: wasOn[i.id] !== false }))
+      legend = layerLegend(items, () => render())
+      legendKey = key
       el.querySelector('[data-role="legend"]').innerHTML = ''
       el.querySelector('[data-role="legend"]').appendChild(legend.el)
     }
@@ -156,16 +186,37 @@ export function covariateSplit ({ armId, number, eyebrow }) {
         height: Math.max(400, 60 + 30 * cov.G + 15 * scenario.n_players)
       }))
 
+    // The caption is assembled sentence by sentence: what each mark is, then
+    // what the posterior view adds, then the section-6 mismatch count. Section
+    // 6 gets its own sentence for the green mark -- there is no "true mean of
+    // a shuffled label", only the average of whoever was given it.
+    const trueSentence = twoD
+      ? (isCorrect
+          ? "the green dashed crosshair is that group's true mean"
+          : 'the green dashed crosshair is what the players given that label actually average — which, for a shuffled label, is just the overall mean')
+      : (isCorrect
+          ? "The green dashed line is what that group's ability actually averages"
+          : 'The green dashed line is what the players given that label actually average — which, for a shuffled label, is just the overall mean')
+    const mismatchSentence = !isCorrect && mismatched != null
+      ? ` The open pink dots are players assigned to the wrong group:
+         <strong class="figures">${mismatched}</strong> of
+         <strong class="figures">${overlap.n_total}</strong> sit in a panel that is
+         not their true group.`
+      : ''
     el.querySelector('[data-role="caption"]').innerHTML = twoD
-      ? `One panel per assigned group. The cross in each panel is that group's
-         estimated mean, with its 90% intervals in ${skillLabel(1)} and ${skillLabel(2)}
-         — the place its players get pulled toward. The green dashed cross is what
-         that group's abilities actually average, and the blue dashed cross is the
-         single target a model without any covariate would have used.`
+      ? `One panel per assigned group, ${skillLabel(1)} across and ${skillLabel(2)} up.
+         The pink diamond is the group's estimated mean with its 90% intervals in
+         each skill — the place its players get pulled toward; ${trueSentence}.
+         The blue dashed crosshair is the estimated population mean μ a model
+         without any covariate would have used. The grey arrow is the pull: from
+         what the player's own plays say to where the model put
+         them.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}${mismatchSentence}`
       : `One panel per assigned group. The solid line in each panel is that group's
-         estimated mean — the place its players get pulled toward. The green dashed
-         line is what that group's ability actually averages, and the blue dashed
-         line is the single target a model without any covariate would have used.`
+         estimated mean — the place its players get pulled toward. ${trueSentence}.
+         The blue dashed line is the estimated population mean μ a model without
+         any covariate would have used. The grey segment is the pull: from what the
+         player's own serves say to where the model put them. Rows are sorted by
+         their no-pooling estimate.${posterior ? " Box = the middle 50% of that model's posterior, whiskers = 90%." : ''}${mismatchSentence}`
 
     const fmt = (x) => (scale === 'theta' ? x.toFixed(2) : x.toFixed(3))
     const globalText = twoD

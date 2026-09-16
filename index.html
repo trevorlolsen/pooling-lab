@@ -31,7 +31,7 @@
     </div>
     <div class="rail-control">
       <label>Scale</label>
-      <span class="seg" id="scale">
+      <span class="seg" id="scale" title="Sections 2, 5, 6 and 7 follow this; section 3 is always on the ability scale and section 4 is fixed at d* = 0">
         <button data-scale="probability" aria-pressed="false">Probability</button>
         <button data-scale="theta" aria-pressed="true">Ability θ</button>
       </span>
@@ -39,8 +39,8 @@
     <div class="rail-control">
       <label>Show</label>
       <span class="seg" id="view">
-        <button data-view="point" aria-pressed="true">Estimates</button>
-        <button data-view="posterior" aria-pressed="false">Posteriors</button>
+        <button data-view="point" aria-pressed="true" title="Estimates: one point per player">Estimates</button>
+        <button data-view="posterior" aria-pressed="false" title="Posteriors: each player's full posterior as a box (or a ring in two skills)">Posteriors</button>
       </span>
     </div>
     <div class="rail-control" id="difficulty-control">

@@ -2,7 +2,7 @@ import { state, subscribe, is2d, skillLabel } from '../state.js'
 import { renderWhenNear } from '../lib/scroll.js'
 import { zip, scenarioAccuracy } from '../lib/transforms.js'
 import { loadAllTeams, orderedArms } from '../data.js'
-import { errorByModel } from '../charts/errorByModel.js'
+import { errorByModel, isDashedArm } from '../charts/errorByModel.js'
 import { layerLegend } from '../lib/layers.js'
 
 /**
@@ -114,13 +114,19 @@ export function evidence () {
     const twoD = is2d()
     const { rows, arms } = accuracyRows(list)
 
+    // One training datum is a serve in one skill and a play in two.
+    const unit = twoD ? 'plays' : 'serves'
+
     // Rebuild the legend whenever the available arms change -- a one-group
-    // population has no `correct` arm to offer.
+    // population has no `correct` arm to offer. The scrambled covariate shares
+    // the correct one's colour, so its swatch is dashed like its line.
     const armKey = arms.map((a) => a.id).join(',')
     if (!legend || legend.key !== armKey) {
       const control = layerLegend([
-        ...arms.map((a) => ({ id: a.id, label: a.label, marker: 'line', color: a.color })),
-        { id: 'range', label: 'Range across teams', marker: 'area', color: '#94a3b8' }
+        ...arms.map((a) => ({
+          id: a.id, label: a.label, marker: isDashedArm(a) ? 'dashed' : 'line', color: a.color
+        })),
+        { id: 'range', label: "Range across teams, in each model's colour", marker: 'area', color: '#94a3b8' }
       ], () => render())
       legend = { key: armKey, control }
       const box = el.querySelector('[data-role="legend"]')
@@ -131,17 +137,21 @@ export function evidence () {
 
     chart.innerHTML = ''
     chart.appendChild(errorByModel({
-      rows, metric, arms, layers, scale: state.scale,
+      rows, metric, arms, layers, scale: state.scale, unit,
       ...(twoD ? { facet: 'skill' } : {}),
       width: chart.clientWidth || 760
     }))
 
     el.querySelector('[data-role="caption"]').textContent =
-      `${list.length} teams, ${arms.length} models${twoD ? ', one panel per skill' : ''}. ` +
+      `${list.length} teams, ${arms.length} models${twoD ? ', one panel per skill' : ''}, ` +
+      `scored at each count of training ${unit} per player. ` +
       'The line is the mean across teams; ' +
-      `the shaded band is the full range, so its width is how much a single team's answer can move.`
+      `the shaded band is the full range, so its width is how much a single team's answer can move. ` +
+      (arms.some(isDashedArm)
+        ? 'The scrambled covariate shares the correct covariate\'s colour and is drawn dashed with open dots.'
+        : '')
 
-    renderTakeaway(rows, arms)
+    renderTakeaway(rows, arms, unit)
     // The table and the takeaway stay complete when a model is hidden. The
     // toggles exist to declutter the chart, not to retract a finding -- and a
     // scoreboard that empties out when you hide everything is no use to anyone.
@@ -173,7 +183,7 @@ export function evidence () {
     }
   }
 
-  function renderTakeaway (rows, arms) {
+  function renderTakeaway (rows, arms, unit) {
     const twoD = is2d()
     const lead = twoD ? rows.filter((r) => r.skill === skillLabel(1)) : rows
     const c = comparisons(lead)
@@ -181,7 +191,7 @@ export function evidence () {
     const parts = []
     if (c.pooling) {
       const { gainLo, gainHi } = c.pooling
-      parts.push(`${twoD ? `In ${skillLabel(1)}, at` : 'At'} <strong class="figures">${c.lo}</strong> observations, partial pooling beats
+      parts.push(`${twoD ? `In ${skillLabel(1)}, at` : 'At'} <strong class="figures">${c.lo}</strong> ${unit} per player, partial pooling beats
         no pooling by <strong class="figures">${gainLo.toFixed(4)}</strong>. At
         <strong class="figures">${c.hi}</strong> the gap is
         <strong class="figures">${gainHi.toFixed(4)}</strong>${
@@ -205,7 +215,7 @@ export function evidence () {
       if (second.pooling) {
         bits.push(`partial pooling beats no pooling by
           <strong class="figures">${second.pooling.gainLo.toFixed(4)}</strong> at ${second.lo}
-          observations and <strong class="figures">${second.pooling.gainHi.toFixed(4)}</strong> at ${second.hi}`)
+          ${unit} and <strong class="figures">${second.pooling.gainHi.toFixed(4)}</strong> at ${second.hi}`)
       }
       if (second.correct != null) {
         bits.push(second.correct > 0

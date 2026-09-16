@@ -99,12 +99,15 @@ export function teamSweep () {
     const scale = state.scale
     const widthOf = (node) => node.clientWidth || 760
 
+    // The unseen player is pink, not the site's truth green: it is a
+    // prediction. The replicate means are dotted in each series' own colour,
+    // so their swatch is a neutral grey and the label says so.
     const widthsLayers = legend('widths', [
       { id: 'team', label: "This team's sample average", marker: 'line', color: '#e69f00' },
-      { id: 'mu', label: 'Population mean μ', marker: 'line', color: '#56b4e9' },
-      { id: 'new', label: 'A player nobody has seen', marker: 'line', color: '#009e73' },
-      { id: 'floor', label: 'τ/√8 floor (θ scale)', marker: 'dashed', color: '#94a3b8' },
-      { id: 'replicates', label: 'Mean across 100 teams (θ scale)', marker: 'dashed', color: '#c3c9d0' }
+      { id: 'mu', label: 'Estimated population mean μ', marker: 'line', color: '#56b4e9' },
+      { id: 'new', label: 'A player nobody has seen', marker: 'line', color: '#cc79a7' },
+      { id: 'floor', label: 'τ/√8 floor (ability scale only)', marker: 'dashed', color: '#94a3b8' },
+      { id: 'replicates', label: 'Mean across 100 teams (dotted, in each colour; ability scale only)', marker: 'dashed', color: '#94a3b8' }
     ])
     box.widths.innerHTML = ''
     box.widths.appendChild(sweepWidths({
@@ -113,10 +116,10 @@ export function teamSweep () {
 
     const ridgeLayers = legend('ridges', [
       { id: 'team', label: "This team's sample average", marker: 'area', color: '#e69f00' },
-      { id: 'mu', label: 'Population mean μ', marker: 'area', color: '#56b4e9' },
-      { id: 'new', label: 'A player nobody has seen', marker: 'area', color: '#009e73' },
-      { id: 'naive', label: 'No-pooling average of the eight', marker: 'dashed', color: '#6b7280', on: false },
-      { id: 'truth', label: 'True μ', marker: 'rule-dashed', color: '#111' },
+      { id: 'mu', label: 'Estimated population mean μ', marker: 'area', color: '#56b4e9' },
+      { id: 'new', label: 'A player nobody has seen', marker: 'area', color: '#cc79a7' },
+      { id: 'naive', label: 'No-pooling average of the eight (the plain sample mean, no model)', marker: 'dashed', color: '#6b7280', on: false },
+      { id: 'truth', label: 'True population mean μ', marker: 'rule-dashed', color: '#111' },
       { id: 'team_truth', label: "This team's true average", marker: 'rule', color: '#e69f00' }
     ])
     box.ridges.innerHTML = ''
@@ -128,7 +131,7 @@ export function teamSweep () {
       { id: 'team', label: 'Sample-average interval, contains μ', marker: 'line', color: '#e69f00' },
       { id: 'miss', label: 'Sample-average interval, misses μ', marker: 'line', color: '#d55e00' },
       { id: 'mu', label: 'The same team’s interval for μ', marker: 'line', color: '#56b4e9' },
-      { id: 'truth', label: 'True μ', marker: 'rule', color: '#111' },
+      { id: 'truth', label: 'True population mean μ', marker: 'rule-dashed', color: '#111' },
       { id: 'walk', label: 'The team from the charts above', marker: 'open', color: '#111' }
     ])
     box.teams.innerHTML = ''
@@ -139,8 +142,9 @@ export function teamSweep () {
 
     const coverageLayers = legend('coverage', [
       { id: 'team', label: "The team's sample average", marker: 'line', color: '#e69f00' },
-      { id: 'mu', label: 'Population mean μ', marker: 'line', color: '#56b4e9' },
-      { id: 'new', label: 'A player nobody has seen', marker: 'line', color: '#009e73' },
+      { id: 'mu', label: 'Estimated population mean μ', marker: 'line', color: '#56b4e9' },
+      { id: 'new', label: 'A player nobody has seen', marker: 'line', color: '#cc79a7' },
+      { id: 'band', label: '95% uncertainty band (Wilson, in each colour)', marker: 'area', color: '#94a3b8' },
       { id: 'nominal', label: 'Nominal 90%', marker: 'dashed', color: '#94a3b8' }
     ])
     box.coverage.innerHTML = ''
@@ -168,11 +172,17 @@ export function teamSweep () {
     const floor = 2 * 1.645 * sweep.truth.standard_error
     const teamTruth = dN.team_true_mean ?? sweep.truth.team_mean
     const seedNote = sweep.seed_selection?.rule ? ` ${sweep.seed_selection.rule}` : ''
+    // The true μ as the text quotes it -- read from the payload, not typed in.
+    const muTruth = Number(sweep.truth.mu).toFixed(2)
 
     // (a) widths
     el.querySelector('[data-role="caption-widths"]').textContent =
+      `A different team of eight from the 40-player roster the rest of the story uses: ` +
       `${J} players observed ${first} to ${last} times each, nested, refitted at every step. ` +
-      `Widths of the 90% posterior intervals; numbers in the text are on the ability scale.`
+      `Widths of the 90% posterior intervals; numbers in the text are on the ability scale. ` +
+      `The dotted lines are the mean widths across ${coverage.n_teams} replicate teams, in each colour, ` +
+      `shown on the ability scale only: this team is one draw, and they show it is a typical one. ` +
+      `On the probability scale this section is fixed at d* = 0; the slider does not apply here.`
     el.querySelector('[data-role="takeaway-widths"]').innerHTML = `
       The team's own average is the easy part: its 90% interval is
       ${fig(d0.team_width)} wide at ${first} serves per player and
@@ -199,9 +209,9 @@ export function teamSweep () {
       average is ${fig(dN.team_mean, 3)} with a 90% interval from
       ${fig(dN.team_low, 3)} to ${fig(dN.team_high, 3)} —
       ${inside
-        ? 'which, on this team, still happens to contain μ = 0'
-        : 'which no longer contains μ = 0, and is right not to: this team really does average above it'}.
-      The blue curve for μ itself ${muInside ? 'still contains 0' : 'has slipped off 0 too'},
+        ? `which, on this team, still happens to contain μ = ${muTruth}`
+        : `which no longer contains μ = ${muTruth}, and is right not to: this team really does average above it`}.
+      The blue curve for μ itself ${muInside ? `still contains ${muTruth}` : `has slipped off ${muTruth} too`},
       because it is wider on purpose: it carries the uncertainty of having drawn
       only eight people. <strong>The team's average is not the population's,
       and the model knows the difference.</strong>`
@@ -210,7 +220,8 @@ export function teamSweep () {
     el.querySelector('[data-role="caption-teams"]').textContent =
       `${coverage.n_teams} teams of ${coverage.n_players}, one facet per step, ranked by their posterior sample average. ` +
       `Orange bars contain μ, red bars miss it; blue bars are the same teams' intervals for μ, ` +
-      `offset just below. The ringed bar is the team the charts above follow (seed ${coverage.walk_through_seed ?? sweep.seed}), ` +
+      `offset just below; the dashed rule is the true population mean. ` +
+      `The ringed bar is the team the charts above follow (seed ${coverage.walk_through_seed ?? sweep.seed}), ` +
       `so you can watch it settle into its place among the hundred.`
     el.querySelector('[data-role="takeaway-teams"]').innerHTML = `
       A precisely known team average is allowed to miss μ. At ${first} serves
@@ -225,7 +236,8 @@ export function teamSweep () {
 
     // (d) coverage curves
     el.querySelector('[data-role="caption-coverage"]').textContent =
-      `Share of ${coverage.n_teams} teams whose 90% interval contains the true μ, with 95% Wilson bands.`
+      `Share of ${coverage.n_teams} teams whose 90% interval contains the true μ; ` +
+      `shaded: 95% uncertainty bands (Wilson), in each curve's colour.`
     el.querySelector('[data-role="takeaway-coverage"]').innerHTML = `
       The same counts as curves: the sample-average interval covers μ in
       ${pct(s0.team_covers_mu)} of teams at ${first} serves and ${pct(sN.team_covers_mu)}

@@ -73,14 +73,16 @@ export function populationDensity ({
     )
   }
 
-  if (hasGroups && showGroups) {
+  // The group name sits on its mean rule and belongs to the same layer: hiding
+  // the means without the names left labels floating over nothing.
+  if (hasGroups && showGroups && on('group_means')) {
     marks.push(
-      ...(on('group_means') ? [Plot.ruleX(groups, {
+      Plot.ruleX(groups, {
         x: 'theta_mean',
         stroke: 'group',
         strokeWidth: 1.2,
         strokeOpacity: 0.65
-      })] : []),
+      }),
       Plot.text(groups, {
         x: 'theta_mean',
         y: () => peak * 1.04,
@@ -102,7 +104,7 @@ export function populationDensity ({
         fillOpacity: 0.75,
         stroke: (d) => (d.child_id === selectedPlayer ? '#111' : 'none'),
         strokeWidth: 1.5,
-        title: (d) => `Player ${d.child_id}\n${d.n_train} training observations\n` +
+        title: (d) => `Player ${d.child_id}\n${d.n_train} training serves\n` +
           `True ability ${d.theta_true.toFixed(2)}` +
           (hasGroups ? `\nGroup: ${d.true_group}` : '')
       }),
