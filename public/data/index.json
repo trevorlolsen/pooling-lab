@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-16T13:50:52Z",
+  "provenance": {
+    "r_version": "R version 4.6.1 (2026-06-24 ucrt)",
+    "cmdstan_version": "2.39.0",
+    "rng_kind": ["Mersenne-Twister", "Inversion", "Rejection"],
+    "stan_source_digests": {
+      "complete_pooling": "23e4cbc40d8beabe",
+      "complete_pooling_2d": "af8a4dd4a98f3350",
+      "hb": "c0050422b064b824",
+      "hb_2d": "6d6875b6f62d9357",
+      "hb_covariate": "616038903ed4984e",
+      "hb_covariate_2d": "717e72d82f73b8a9",
+      "no_pooling": "ee0152d02ef61df5",
+      "no_pooling_2d": "8fea9c5c4da433da"
+    },
+    "priors": {
+      "mu_prior_mean": 0,
+      "mu_prior_sd": 2,
+      "tau_prior_scale": 1,
+      "covariate_effect_prior_sd": 1
+    },
+    "prior_id": "135b4ff5e564fc7c",
+    "sampling": {
+      "seed": 20261914,
+      "chains": 4,
+      "iter_warmup": 1000,
+      "iter_sampling": 1000,
+      "refresh": 25,
+      "adapt_delta": 0.9,
+      "max_treedepth": 12
+    }
+  },
+  "domains": {
+    "theta": [-4, 3.7],
+    "probability": [0, 1],
+    "difficulty": [-1.5, 1.5],
+    "theta2d": [-4, 3.6]
+  },
+  "difficulty_grid": [-1.5, -1.45, -1.4, -1.35, -1.3, -1.25, -1.2, -1.15, -1.1, -1.05, -1, -0.95, -0.9, -0.85, -0.8, -0.75, -0.7, -0.65, -0.6, -0.55, -0.5, -0.45, -0.4, -0.35, -0.3, -0.25, -0.2, -0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5],
+  "arms": [
+    {
+      "id": "complete",
+      "label": "Complete pooling",
+      "model_type": "complete_pooling",
+      "color": "#000000",
+      "symbol": "line-ns-open",
+      "order": 1
+    },
+    {
+      "id": "no_pool",
+      "label": "No pooling",
+      "model_type": "no_pooling",
+      "color": "#e69f00",
+      "symbol": "circle-open",
+      "order": 2
+    },
+    {
+      "id": "none",
+      "label": "Partial pooling",
+      "model_type": "simple_hb",
+      "color": "#56b4e9",
+      "symbol": "circle",
+      "order": 3
+    },
+    {
+      "id": "wrong",
+      "label": "Partial pooling + scrambled groups",
+      "model_type": "covariate_hb",
+      "color": "#cc79a7",
+      "symbol": "diamond-open",
+      "order": 4
+    },
+    {
+      "id": "correct",
+      "label": "Partial pooling + experience",
+      "model_type": "covariate_hb",
+      "color": "#cc79a7",
+      "symbol": "diamond",
+      "order": 5
+    }
+  ],
+  "truth_color": "#009e73",
+  "metric_definitions": {
+    "divergences": "Number of post-warmup Hamiltonian trajectories that ended with a divergent transition. Ideally zero.",
+    "max_rhat": "Largest split R-hat across monitored parameters. Values near 1 indicate that chains mixed to the same distribution.",
+    "min_ess_bulk": "Smallest bulk effective sample size across monitored parameters. Larger values mean more independent information in the center of the posterior.",
+    "min_ess_tail": "Smallest tail effective sample size across monitored parameters. Larger values mean more independent information in the posterior tails.",
+    "treedepth_hits": "Number of post-warmup transitions that reached the configured maximum tree depth. Ideally zero.",
+    "n_train": "Number of training observations available for this player. More observations usually reduce individual uncertainty and therefore reduce shrinkage.",
+    "in_sample_rlh": "Root likelihood on the training observations: the geometric mean probability assigned to the outcomes Stan fit. Higher is better; 0.5 is chance-level for a binary outcome.",
+    "out_of_sample_rlh": "Root likelihood on held-out observations that were never included in the Stan likelihood. Higher is better; 0.5 is chance-level for a binary outcome."
+  },
+  "populations": [
+    {
+      "preset": "one_population",
+      "label": "One normal population",
+      "true_mu": 0,
+      "within_sd": 0.8,
+      "mean_separation": 0,
+      "separation_ratio": 0,
+      "bimodal": false,
+      "covariate_name": null,
+      "arms": ["complete", "no_pool", "none", "wrong"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["one_population__20260914", "one_population__20260915", "one_population__20260916", "one_population__20260917", "one_population__20260918"]
+    },
+    {
+      "preset": "same_mean",
+      "label": "Two groups, same average",
+      "true_mu": 0,
+      "within_sd": 0.8,
+      "mean_separation": 0,
+      "separation_ratio": 0,
+      "bimodal": false,
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["same_mean__20260914", "same_mean__20260915", "same_mean__20260916", "same_mean__20260917", "same_mean__20260918"]
+    },
+    {
+      "preset": "overlapping",
+      "label": "Two groups, overlapping",
+      "true_mu": -0.4,
+      "within_sd": 0.8,
+      "mean_separation": 0.8,
+      "separation_ratio": 1,
+      "bimodal": false,
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["overlapping__20260914", "overlapping__20260915", "overlapping__20260916", "overlapping__20260917", "overlapping__20260918"]
+    },
+    {
+      "preset": "distinct",
+      "label": "Two clearly different groups",
+      "true_mu": -1,
+      "within_sd": 0.45,
+      "mean_separation": 2,
+      "separation_ratio": 4.4444,
+      "bimodal": true,
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["distinct__20260914", "distinct__20260915", "distinct__20260916", "distinct__20260917", "distinct__20260918"]
+    },
+    {
+      "preset": "tight_groups",
+      "label": "Two tightly clustered groups",
+      "true_mu": -1,
+      "within_sd": 0.25,
+      "mean_separation": 2,
+      "separation_ratio": 8,
+      "bimodal": true,
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["tight_groups__20260914", "tight_groups__20260915", "tight_groups__20260916", "tight_groups__20260917", "tight_groups__20260918"]
+    }
+  ],
+  "dimensions": [1, 2],
+  "skill_labels": ["Serve", "Reception"],
+  "populations2d": [
+    {
+      "preset": "one_population",
+      "label": "One normal population",
+      "true_mu": [0, 0],
+      "within_sd": [0.8, 0.8],
+      "rho": 0.5,
+      "rho_marginal": 0.5,
+      "mean_separation": [0, 0],
+      "separation_ratio": [0, 0],
+      "bimodal": [false, false],
+      "covariate_name": null,
+      "arms": ["complete", "no_pool", "none", "wrong"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["one_population__20260914__2d", "one_population__20260915__2d", "one_population__20260916__2d", "one_population__20260917__2d", "one_population__20260918__2d"]
+    },
+    {
+      "preset": "same_mean",
+      "label": "Two groups, same average",
+      "true_mu": [0, 0],
+      "within_sd": [0.8, 0.8],
+      "rho": 0.5,
+      "rho_marginal": 0.5,
+      "mean_separation": [0, 0],
+      "separation_ratio": [0, 0],
+      "bimodal": [false, false],
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["same_mean__20260914__2d", "same_mean__20260915__2d", "same_mean__20260916__2d", "same_mean__20260917__2d", "same_mean__20260918__2d"]
+    },
+    {
+      "preset": "overlapping",
+      "label": "Two groups, overlapping",
+      "true_mu": [-0.4, -0.24],
+      "within_sd": [0.8, 0.8],
+      "rho": 0.5,
+      "rho_marginal": 0.5569,
+      "mean_separation": [0.8, 0.48],
+      "separation_ratio": [1, 0.6],
+      "bimodal": [false, false],
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["overlapping__20260914__2d", "overlapping__20260915__2d", "overlapping__20260916__2d", "overlapping__20260917__2d", "overlapping__20260918__2d"]
+    },
+    {
+      "preset": "distinct",
+      "label": "Two clearly different groups",
+      "true_mu": [-1, -0.6],
+      "within_sd": [0.45, 0.45],
+      "rho": 0.5,
+      "rho_marginal": 0.8526,
+      "mean_separation": [2, 1.2],
+      "separation_ratio": [4.4444, 2.6667],
+      "bimodal": [true, true],
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["distinct__20260914__2d", "distinct__20260915__2d", "distinct__20260916__2d", "distinct__20260917__2d", "distinct__20260918__2d"]
+    },
+    {
+      "preset": "tight_groups",
+      "label": "Two tightly clustered groups",
+      "true_mu": [-1, -0.6],
+      "within_sd": [0.25, 0.25],
+      "rho": 0.5,
+      "rho_marginal": 0.9422,
+      "mean_separation": [2, 1.2],
+      "separation_ratio": [8, 4.8],
+      "bimodal": [true, true],
+      "covariate_name": "Experience",
+      "arms": ["complete", "no_pool", "none", "wrong", "correct"],
+      "seeds": [20260914, 20260915, 20260916, 20260917, 20260918],
+      "default_seed": 20260914,
+      "scenario_ids": ["tight_groups__20260914__2d", "tight_groups__20260915__2d", "tight_groups__20260916__2d", "tight_groups__20260917__2d", "tight_groups__20260918__2d"]
+    }
+  ]
+}

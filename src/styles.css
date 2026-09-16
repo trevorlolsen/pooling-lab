@@ -1,0 +1,290 @@
+:root {
+  /* Okabe-Ito. Same values as R/export/design_tokens.R; index.json is the
+     source of truth for the arms, these are for prose and chrome. */
+  --complete: #000000;
+  --no-pool: #e69f00;
+  --partial: #56b4e9;
+  --truth: #009e73;
+  --covariate: #cc79a7;
+
+  --ink: #1a1d21;
+  --ink-soft: #55606c;
+  --ink-faint: #8a939e;
+  --rule: #e2e6ea;
+  --page: #fdfdfc;
+  --panel: #f5f7f9;
+
+  --measure: 34rem;
+  --wide: 68rem;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 400 18px/1.62 Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .ui, .rail, .chart-note, figcaption, label, button, select, input {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+/* --- sticky rail ------------------------------------------------------ */
+
+.rail {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.55rem max(1rem, calc((100vw - var(--wide)) / 2));
+  background: rgba(253, 253, 252, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+.rail-title { font-weight: 700; letter-spacing: -0.01em; margin-right: auto; }
+.rail-title span { font-weight: 400; color: var(--ink-faint); margin-left: 0.5rem; }
+
+.rail-control { display: flex; align-items: center; gap: 0.4rem; }
+.rail-control label { color: var(--ink-soft); font-size: 12px; }
+
+select, button {
+  font-size: 13px;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--ink);
+}
+button { cursor: pointer; }
+button[aria-pressed='true'] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 5px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button + button { border-left: 1px solid var(--rule); }
+
+.progress {
+  position: fixed;
+  left: 0; top: 0;
+  height: 2px;
+  background: var(--partial);
+  z-index: 50;
+  transition: width 0.1s linear;
+}
+
+/* --- layout ----------------------------------------------------------- */
+
+.wrap { max-width: var(--wide); margin: 0 auto; padding: 0 1rem; }
+
+.hero { padding: 5rem 0 3.5rem; max-width: var(--measure); }
+.hero h1 {
+  font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  margin: 0 0 1.1rem;
+}
+.hero p { font-size: 1.15rem; color: var(--ink-soft); margin: 0 0 1rem; }
+
+section { padding: 3.5rem 0; border-top: 1px solid var(--rule); }
+section > .wrap > header { max-width: var(--measure); margin-bottom: 1.75rem; }
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.5rem;
+}
+h2 {
+  font-size: clamp(1.5rem, 3vw, 2.05rem);
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.7rem;
+}
+section p { max-width: var(--measure); }
+
+/* --- sticky graphic sections ------------------------------------------ */
+
+.scrolly { display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: 2.5rem; }
+.scrolly-steps > .step {
+  min-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.step p { margin: 0; }
+.step .step-lede { font-size: 1.12rem; font-weight: 600; margin-bottom: 0.5rem; letter-spacing: -0.01em; }
+.step[data-active='false'] { opacity: 0.32; transition: opacity 0.25s ease; }
+.step[data-active='true'] { opacity: 1; transition: opacity 0.25s ease; }
+
+.scrolly-graphic {
+  position: sticky;
+  top: 4.2rem;
+  height: fit-content;
+  align-self: start;
+  padding-top: 1rem;
+}
+
+figure { margin: 0; }
+figcaption { font-size: 12.5px; color: var(--ink-faint); margin-top: 0.5rem; }
+
+.chart-panel {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 12px; color: var(--ink-soft); margin-bottom: 0.65rem; }
+.legend span::before { content: '●'; margin-right: 0.3rem; }
+.legend .complete::before { color: var(--complete); content: '│'; }
+.legend .no-pool::before { color: var(--no-pool); content: '○'; }
+.legend .partial::before { color: var(--partial); }
+.legend .covariate::before { color: var(--covariate); content: '◆'; }
+.legend .truth::before { color: var(--truth); content: '✕'; }
+
+/* --- callouts --------------------------------------------------------- */
+
+.takeaway {
+  max-width: var(--measure);
+  margin: 1.75rem 0 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--partial);
+  font-size: 1.2rem;
+  line-height: 1.45;
+}
+.takeaway strong { font-weight: 700; }
+
+.figures { font-variant-numeric: tabular-nums; }
+
+/* Clicking a player should pay out immediately, not just draw a ring. */
+.player-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  align-items: baseline;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.player-detail > strong { color: var(--ink); }
+.player-detail b { color: var(--ink); font-weight: 600; }
+
+.aside {
+  display: block;
+  margin-top: 0.6rem;
+  font-size: 0.86em;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.note {
+  max-width: var(--measure);
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-top: 1.25rem;
+}
+
+/* The data-generating process: numbered steps, then this population's table. */
+.dgp { max-width: var(--measure); }
+.dgp-steps { padding-left: 1.2rem; margin: 0 0 1.2rem; }
+.dgp-steps li { margin-bottom: 0.7rem; }
+.dgp-steps li strong { display: block; font-family: 'Inter', system-ui, sans-serif; font-size: 0.95rem; }
+.dgp-steps li em { font-style: italic; }
+.dgp .mat { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; }
+.dgp-table td, .dgp-table th { text-align: right; }
+.dgp-table td:first-child, .dgp-table th:first-child { text-align: left; }
+
+h3.subhead {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  margin: 3rem 0 0.6rem;
+  max-width: var(--measure);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.control-note { font-size: 12px; color: var(--ink-faint); }
+
+.metric-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+}
+.metric-table th {
+  text-align: right;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--rule);
+  padding: 0.4rem 0.6rem;
+}
+.metric-table th:first-child, .metric-table td:first-child { text-align: left; }
+.metric-table td {
+  text-align: right;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--rule);
+}
+.metric-table tr.best td { background: #f1f8f4; }
+/* Per-skill rows sit under their arm's total. */
+.metric-table tr.sub td { color: var(--ink-soft); font-size: 12px; padding-top: 0.2rem; padding-bottom: 0.2rem; }
+.metric-table tr.sub td:nth-child(2) { padding-left: 1.4rem; }
+.metric-table tr.best td b { color: var(--truth); }
+.swatch {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 2px;
+  margin-right: 0.45rem;
+  vertical-align: baseline;
+}
+
+.loading { padding: 4rem 0; color: var(--ink-faint); }
+.error {
+  padding: 1rem;
+  border-left: 3px solid #d55e00;
+  background: #fff6f0;
+  max-width: var(--measure);
+}
+
+/* --- responsive ------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  body { font-size: 17px; }
+  /* Sticky scrollytelling degrades badly on a phone: stack instead. */
+  .scrolly { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .scrolly-graphic { position: static; }
+  .scrolly-steps > .step { min-height: 0; padding: 0.9rem 0; }
+  .step[data-active='false'] { opacity: 1; }
+  .rail { font-size: 12px; gap: 0.6rem; }
+  .rail-title span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .step, .progress { transition: none; }
+}

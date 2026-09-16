@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pooling Lab — when should a model trust a small sample?</title>
+  <meta name="description" content="An interactive data story about Bayesian partial pooling: when a model should trust an individual, when it should borrow from the group, and what a covariate actually buys you." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="progress" id="progress" style="width:0"></div>
+
+  <nav class="rail" id="rail">
+    <div class="rail-title">Pooling Lab <span>when should a model trust a small sample?</span></div>
+    <div class="rail-control">
+      <label for="population">Population</label>
+      <select id="population"></select>
+    </div>
+    <div class="rail-control">
+      <label for="seed">Team</label>
+      <select id="seed"></select>
+    </div>
+    <div class="rail-control" id="dimension-control" hidden>
+      <label>Ability</label>
+      <span class="seg" id="dimension">
+        <button data-dimension="1d" aria-pressed="true">One skill</button>
+        <button data-dimension="2d" aria-pressed="false">Two skills</button>
+      </span>
+    </div>
+    <div class="rail-control">
+      <label>Scale</label>
+      <span class="seg" id="scale">
+        <button data-scale="probability" aria-pressed="false">Probability</button>
+        <button data-scale="theta" aria-pressed="true">Ability θ</button>
+      </span>
+    </div>
+    <div class="rail-control">
+      <label>Show</label>
+      <span class="seg" id="view">
+        <button data-view="point" aria-pressed="true">Estimates</button>
+        <button data-view="posterior" aria-pressed="false">Posteriors</button>
+      </span>
+    </div>
+    <div class="rail-control" id="difficulty-control">
+      <label for="difficulty">Serve difficulty d*</label>
+      <input type="range" id="difficulty" min="-1.5" max="1.5" step="0.05" value="0" />
+      <output id="difficulty-value" class="figures">0.00</output>
+    </div>
+  </nav>
+
+  <main id="app">
+    <div class="wrap loading">Loading…</div>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "pooling-lab-story",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Static data story about Bayesian partial pooling. Reads precomputed JSON; no server at runtime.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke.mjs",
+    "render-test": "node scripts/render-test.mjs",
+    "check": "npm run smoke && npm run render-test && npm run build"
+  },
+  "dependencies": {
+    "@observablehq/plot": "^0.6.17",
+    "d3": "^7.9.0"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "vite": "^7.1.5"
+  }
+}
