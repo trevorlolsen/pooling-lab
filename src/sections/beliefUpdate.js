@@ -5,6 +5,7 @@ import {
   thetaGrid, logNormalPrior, accumulate, normalize, summarize,
   predictedRate, updateSequence, mulberry32, frameBounds
 } from '../lib/bayesGrid.js'
+import { stickyChartHeight } from '../lib/stickyFit.js'
 import { beliefUpdate } from '../charts/beliefUpdate.js'
 import { beliefTrace } from '../charts/beliefTrace.js'
 
@@ -483,11 +484,12 @@ export function beliefUpdateSection () {
       truth: scenario().truth.theta_true[k],
       bounds,
       width: chartBox.clientWidth || 760,
-      // Pinned: the panel, the 90px likelihood strip and the caption all have to
-      // fit between the rail and the bottom of the window. Rebuilt on resize.
-      height: typeof window === 'undefined'
-        ? 320
-        : Math.max(220, Math.min(340, window.innerHeight - 290))
+      // Pinned: the panel, the 90px likelihood strip and the caption all have
+      // to fit between the rail and the bottom of the window. Measured rather
+      // than a constant -- see lib/stickyFit.js -- and rebuilt on resize. The
+      // strip is inside [data-role="chart"], so it is part of what is being
+      // sized here, not part of the chrome measured around it.
+      height: stickyChartHeight(chartBox, { min: 220, max: 340, fallback: 320, reserve: 90 })
     }))
     el.querySelector('[data-role="caption"]').innerHTML =
       `Player ${playerId}, ${at} of ${frames.length - 1} serves absorbed. ` +

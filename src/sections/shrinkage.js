@@ -6,6 +6,7 @@ import { playerEllipses } from '../charts/playerEllipses.js'
 import { hasPosteriorQuantiles } from '../charts/posteriorBoxes.js'
 import { layerLegend } from '../lib/layers.js'
 import { bandFilter, scenarioBands } from '../lib/bandFilter.js'
+import { stickyChartHeight } from '../lib/stickyFit.js'
 
 /**
  * Section 2 — the flagship. One chart, pinned, carrying a five-beat argument as
@@ -231,7 +232,14 @@ export function adaptiveShrinkage () {
 
     // The pinned figure has to fit between the rail and the bottom of the
     // window, less the legend and caption sitting around it.
-    const fit = typeof window === 'undefined' ? null : Math.max(460, window.innerHeight - 190)
+    // Measured against the live rail, not a constant. See lib/stickyFit.js --
+    // the old `innerHeight - 190` overflowed the window by 182px once the rail
+    // grew a section-nav row.
+    // min 320: this panel's chrome (legend, band filter, caption, padding)
+    // measures ~309px, so a 720px-tall window has only ~250px left and the
+    // column will overflow a little rather than squeeze forty player rows into
+    // something unreadable. 800px and up fit exactly.
+    const fit = stickyChartHeight(chart, { min: 320, max: 560, fallback: 560 })
 
     chart.innerHTML = ''
     chart.appendChild(twoD
@@ -248,7 +256,7 @@ export function adaptiveShrinkage () {
         selectedPlayer: state.selectedPlayer,
         onSelect: (id) => setState({ selectedPlayer: id }, 'select'),
         width: chart.clientWidth || 760,
-        height: fit == null ? 560 : Math.min(560, fit)
+        height: fit
       })
       : playerRows({
         scenario,
