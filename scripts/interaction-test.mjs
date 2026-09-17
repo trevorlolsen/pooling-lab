@@ -603,5 +603,151 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   console.log('  2D: skipped, scenarios-2d not generated')
 }
 
+// --- the rail's section nav ---------------------------------------------
+// Known harness limitation: jsdom has no IntersectionObserver, so
+// trackSections() takes its early return and hands back an empty teardown
+// (lib/scroll.js:66) without ever firing. The aria-current highlighting that
+// follows the reader down the page therefore cannot be exercised headlessly --
+// that needs a real viewport and a real scroll. Do NOT stub an
+// IntersectionObserver to widen this: four sections already depend on the
+// current fallbacks (see the note on the belief block above) and would change
+// behaviour under one.
+//
+// What is checked here is everything that is not the highlight: one entry per
+// mounted section, every data-target naming a real section, the labels tracking
+// the sections' own eyebrows, the click wiring, and -- the bug this nav is most
+// likely to grow -- a remount rebuilding the entries rather than stacking a
+// second set of eight on top of the first.
+{
+  const { buildSectionNav } = await import('../src/lib/sectionNav.js')
+  const { convergence } = await import('../src/sections/convergence.js')
+  const { teamSweep } = await import('../src/sections/teamSweep.js')
+  const NAV_SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence,
+    teamSweep, correctCovariateSplit, wrongCovariateSplit, evidence]
+
+  const nav = document.createElement('nav')
+  nav.id = 'section-nav'
+  nav.className = 'rail-nav'
+  document.body.appendChild(nav)
+
+  // Remount exactly the way the dimension block above does, which is the way
+  // main.js's mountSections() does.
+  const remountAll = () => {
+    for (const teardown of mounted) teardown()
+    mounted.length = 0
+    app.innerHTML = ''
+    for (const section of NAV_SECTIONS) {
+      const { el, mount } = section()
+      app.appendChild(el)
+      mounted.push(mount() ?? (() => {}))
+    }
+    return [...app.querySelectorAll(':scope > section')]
+  }
+  const entriesIn = () => [...nav.querySelectorAll('button')]
+  const click = (node) => node.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+  // Same split main.js does: the number, then the title.
+  const eyebrowOf = (section) => {
+    const raw = (section.querySelector('.eyebrow')?.textContent ?? '')
+      .replace(/\s+/g, ' ').trim()
+    const i = raw.indexOf('—')
+    return { number: raw.slice(0, i).trim(), title: raw.slice(i + 1).trim(), raw }
+  }
+
+  state.dimension = '1d'
+  state.population = 'distinct'
+  state.seed = 20260914
+  state.scenario = read('scenarios/distinct__20260914.json')
+  state.selectedPlayer = null
+  state.scale = 'probability'
+  let sections = remountAll()
+  await settle(400)
+  ok(sections.length === 8, `expected eight mounted sections, found ${sections.length}`)
+
+  const navigated = []
+  buildSectionNav(nav, sections, (section) => navigated.push(section.id))
+
+  // One entry per section, in section order, each pointing at a real section.
+  ok(entriesIn().length === sections.length,
+    `expected one nav entry per section (${sections.length}), found ${entriesIn().length}`)
+  ok(entriesIn().map((b) => b.dataset.target).join() === sections.map((s) => s.id).join(),
+    'nav entries should be in section order')
+  for (const button of entriesIn()) {
+    ok(button.type === 'button', `entry "${button.dataset.target}" should be type=button`)
+    ok(document.getElementById(button.dataset.target),
+      `data-target "${button.dataset.target}" should name a section that is on the page`)
+  }
+
+  // The labels are derived from the sections, not from a second list in
+  // main.js: if a section module renumbers or retitles itself, the nav follows.
+  const labels = []
+  sections.forEach((section, i) => {
+    const { number, title, raw } = eyebrowOf(section)
+    const button = entriesIn()[i]
+    ok(button.querySelector('.rail-nav-num')?.textContent === number,
+      `${section.id}: the entry should carry the eyebrow's number "${number}"`)
+    ok(button.querySelector('.rail-nav-title')?.textContent === title,
+      `${section.id}: the entry title should be the eyebrow's title "${title}"`)
+    ok(button.title === raw, `${section.id}: the full eyebrow should survive in the tooltip`)
+    labels.push(raw)
+  })
+
+  // Click wiring: the entry hands its section back to the caller to scroll to.
+  // (jsdom has no scrollIntoView either, which is why the navigate callback is
+  // a parameter rather than baked into the button.)
+  click(entriesIn()[3])
+  ok(navigated.length === 1 && navigated[0] === sections[3].id,
+    `clicking entry 4 should navigate to "${sections[3].id}", got ${navigated.join() || 'nothing'}`)
+  ok(entriesIn()[3].getAttribute('aria-current') === 'true',
+    'a clicked entry should read as current immediately')
+  click(entriesIn()[6])
+  ok(navigated[1] === sections[6].id, 'clicking another entry should navigate there too')
+  ok(entriesIn().filter((b) => b.getAttribute('aria-current') === 'true').length === 1,
+    'only one entry at a time should be marked current')
+
+  // The rebuild. main.js calls mountSections() again on every population and
+  // dimension change; the nav has to be replaced, not appended to.
+  const before = entriesIn().length
+  sections = remountAll()
+  await settle(400)
+  buildSectionNav(nav, sections, (section) => navigated.push(section.id))
+  ok(entriesIn().length === before,
+    `a remount must rebuild the nav, not duplicate it: ${entriesIn().length} entries, expected ${before}`)
+  ok(entriesIn().every((b, i) => document.getElementById(b.dataset.target) === sections[i]),
+    'the rebuilt entries should target the freshly mounted sections, not the detached ones')
+
+  // Sections that degrade still get an entry -- a nav that quietly drops two of
+  // eight is worse than one that takes the reader somewhere thin.
+  state.population = 'one_population'
+  setState({ scenario: read('scenarios/one_population__20260914.json'), selectedPlayer: null }, 'scenario')
+  sections = remountAll()
+  await settle(400)
+  buildSectionNav(nav, sections, () => {})
+  ok(entriesIn().length === 8,
+    `a one-group population should still get eight entries, found ${entriesIn().length}`)
+  ok(/Not available/.test(document.getElementById('covariate-correct').textContent),
+    'section 6 should be the unavailable one for a one-group population')
+  ok(entriesIn().some((b) => b.dataset.target === 'covariate-correct'),
+    'the unavailable section 6 must keep its nav entry')
+
+  if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
+    state.dimension = '2d'
+    state.population = 'distinct'
+    state.scenario = read('scenarios-2d/distinct__20260914__2d.json')
+    state.scale = 'theta'
+    sections = remountAll()
+    await settle(700)
+    buildSectionNav(nav, sections, () => {})
+    ok(document.getElementById('belief').querySelector('.note'),
+      '2D: section 3 should be a note under the two-skill toggle')
+    ok(entriesIn().length === 8 &&
+      entriesIn().some((b) => b.dataset.target === 'belief'),
+    '2D: the note-only section 3 must keep its nav entry')
+    state.dimension = '1d'
+    state.scale = 'probability'
+  }
+
+  console.log(`  section nav: ${labels.join(' · ')}`)
+}
+
 console.log(fails === 0 ? '\nOK - interactions rewire correctly' : `\n${fails} FAILURE(S)`)
 process.exit(fails ? 1 : 0)

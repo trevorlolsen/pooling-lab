@@ -129,7 +129,11 @@ section p { max-width: var(--measure); }
 
 .scrolly-graphic {
   position: sticky;
-  top: 4.2rem;
+  /* Pinned under the rail, not behind it. The 4.2rem this used to be was
+     already shorter than the rail wraps to (it measured 6.6rem before the
+     section nav was added, and the top of every pinned chart was hidden);
+     --rail-h is main.js's live measurement of it. */
+  top: var(--rail-h, 5.5rem);
   height: fit-content;
   align-self: start;
   padding-top: 1rem;
@@ -380,4 +384,101 @@ input[type='range']:focus-visible { outline: 2px solid var(--partial); outline-o
      stop the notes from forcing a horizontal scroll. */
   #belief .controls { gap: 0.5rem 0.7rem; }
   #belief .controls input[type='range'] { width: 100%; flex: 1 1 100%; }
+}
+
+/* --- the section nav in the rail --------------------------------------- */
+
+/* Twenty-eight viewports of page across eight sections. The nav is a second
+   row of the sticky rail: where you are, and one click to anywhere else.
+   Entries are built by main.js from each section's own eyebrow. */
+
+/* The rail is sticky, so a section scrolled to its own top lands underneath
+   it. main.js publishes the rail's measured height as --rail-h; the fallback
+   is roughly a two-row rail, for the moment before the first measurement. */
+main > section { scroll-margin-top: var(--rail-h, 5.5rem); }
+
+.rail-nav {
+  /* Its own full-width row of the rail's flex wrap, so the controls above
+     keep their layout untouched. */
+  flex: 1 0 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.1rem;
+  /* Too many entries for the width: scroll the nav, never the page. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.rail-nav button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  /* Never shrink. Flex shrinks items in proportion to their width, which cuts
+     every entry a little -- including "The team", which has nothing to spare
+     and came out as "The t...". The long ones are capped below instead, and if
+     the row still does not fit it scrolls. */
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.16rem 0.45rem;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+.rail-nav button:hover {
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--rule);
+}
+.rail-nav button:focus-visible { outline: 2px solid var(--partial); outline-offset: 2px; }
+
+.rail-nav .rail-nav-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+/* The number always shows; the title is what gives way when space runs out.
+   The cap is set so all eight fit the rail's own 68rem measure: the six short
+   titles stay whole and only sections 4 and 5, whose eyebrows are sentences,
+   are cut. */
+.rail-nav .rail-nav-title {
+  min-width: 0;
+  max-width: 7.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Deliberately NOT the button[aria-pressed='true'] rule: the rail's other
+   controls own that look, and "the scale you picked" and "the section you are
+   in" are different statements. This one is filled in the partial-pooling
+   blue, dark ink on light blue, and carries its own weight. */
+.rail-nav button[aria-current='true'] {
+  color: var(--ink);
+  background: var(--partial);
+  border-color: var(--partial);
+  font-weight: 600;
+}
+.rail-nav button[aria-current='true'] .rail-nav-num { color: var(--ink); }
+
+@media (max-width: 860px) {
+  .rail-nav { gap: 0.1rem; margin-top: 0; }
+  /* Eight entries do not fit a phone. Truncate harder and let the nav itself
+     scroll sideways: it is a flex item with min-width: 0 inside the rail, so
+     this scrolls the row and never widens the page. */
+  .rail-nav button { padding: 0.14rem 0.4rem; }
+  .rail-nav .rail-nav-title { max-width: 9ch; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* html { scroll-behavior } is already switched to auto above, which is what
+     the nav's scrollIntoView rides on. This covers the nav's own paint. */
+  .rail-nav button { transition: none; }
 }

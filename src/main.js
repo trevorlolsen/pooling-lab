@@ -1,5 +1,7 @@
 import './styles.css'
 import { loadIndex, loadScenario, scenarioId, armTokens, hasDimension2d } from './data.js'
+import { trackSections } from './lib/scroll.js'
+import { buildSectionNav, keepEntryVisible } from './lib/sectionNav.js'
 import { state, setState } from './state.js'
 import { theTeam } from './sections/team.js'
 import { adaptiveShrinkage } from './sections/shrinkage.js'
@@ -20,6 +22,8 @@ const railDifficulty = document.getElementById('difficulty')
 const difficultyValue = document.getElementById('difficulty-value')
 const difficultyControl = document.getElementById('difficulty-control')
 const progress = document.getElementById('progress')
+const rail = document.getElementById('rail')
+const sectionNav = document.getElementById('section-nav')
 
 const SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence, teamSweep,
   correctCovariateSplit, wrongCovariateSplit, evidence]
@@ -105,6 +109,106 @@ async function swapScenario () {
   }
 }
 
+/**
+ * The rail is sticky at the top, so a section scrolled to its own top lands
+ * underneath it. Publishing the rail's measured height as --rail-h lets the
+ * stylesheet reserve exactly that much scroll-margin, whatever the rail
+ * happens to wrap to at this width.
+ */
+function syncRailHeight () {
+  if (!rail) return
+  const h = rail.offsetHeight
+  if (h > 0) document.documentElement.style.setProperty('--rail-h', `${h + 12}px`)
+}
+
+/** Where a section's top should come to rest: just under the sticky rail. */
+function landingOffset () {
+  return (rail?.offsetHeight ?? 0) + 12
+}
+
+function scrollToSection (section) {
+  if (!section.scrollIntoView) return
+  // No `behavior` here on purpose: `html { scroll-behavior: smooth }` already
+  // covers this, and the prefers-reduced-motion block already turns it off.
+  // Passing behavior: 'smooth' would override the reader's setting.
+  section.scrollIntoView({ block: 'start' })
+  settleAt(section)
+}
+
+// Only ever one settler running: clicking a second entry while the first jump
+// is still settling must hand the page over, not have two of these pulling it
+// in different directions.
+let cancelSettle = () => {}
+
+/**
+ * Keep nudging the section back into place while the page finishes growing.
+ *
+ * Charts render lazily as they come near the viewport (renderWhenNear), so a
+ * jump from section 1 to section 6 renders four sections' worth of charts on
+ * the way down and the content ABOVE the target gets taller while the smooth
+ * scroll is still running. Measured in Chromium, that left the target about
+ * 550px below where it was asked to be -- far enough that the reader lands in
+ * the previous section and the nav honestly highlights the previous section.
+ *
+ * So: wait for the scroll to stop, and if the target is not where it should
+ * be, close the gap without re-animating (a second smooth scroll on top of the
+ * first reads as the page fighting itself). Any scroll of the reader's own
+ * cancels the whole thing immediately.
+ */
+function settleAt (section, timeout = 1500) {
+  cancelSettle()
+  let cancelled = false
+  const cancel = () => { cancelled = true; release() }
+  const release = () => {
+    for (const type of ['wheel', 'touchstart', 'keydown']) {
+      window.removeEventListener(type, cancel)
+    }
+  }
+  for (const type of ['wheel', 'touchstart', 'keydown']) {
+    window.addEventListener(type, cancel, { passive: true })
+  }
+  cancelSettle = cancel
+
+  const deadline = Date.now() + timeout
+  let previousY = null
+  const tick = () => {
+    if (cancelled) return
+    const y = window.scrollY
+    const stopped = previousY !== null && Math.abs(y - previousY) < 1
+    previousY = y
+    if (stopped) {
+      const off = section.getBoundingClientRect().top - landingOffset()
+      if (Math.abs(off) > 2) {
+        window.scrollBy({ top: off, behavior: 'auto' })
+        previousY = null
+      }
+    }
+    if (Date.now() < deadline) setTimeout(tick, 100)
+    else release()
+  }
+  setTimeout(tick, 100)
+}
+
+function mountSectionNav () {
+  if (!sectionNav) return
+  const sectionEls = [...app.querySelectorAll(':scope > section')]
+  const entries = buildSectionNav(sectionNav, sectionEls, scrollToSection)
+
+  // trackSections returns a teardown, and it goes on the same `mounted` array
+  // the section mounts use. Without that, every population or dimension switch
+  // would leave its IntersectionObserver connected to detached sections.
+  mounted.push(trackSections(sectionEls, (i) => {
+    entries.forEach((entry, j) => {
+      if (j === i) entry.setAttribute('aria-current', 'true')
+      else entry.removeAttribute('aria-current')
+    })
+    keepEntryVisible(sectionNav, entries[i])
+  }))
+
+  // The nav is part of the rail, so adding it changed the rail's height.
+  syncRailHeight()
+}
+
 function mountSections () {
   for (const teardown of mounted) teardown()
   mounted = []
@@ -115,6 +219,7 @@ function mountSections () {
     app.appendChild(el)
     mounted.push(mount() ?? (() => {}))
   }
+  mountSectionNav()
 }
 
 function trackProgress () {
@@ -147,6 +252,12 @@ async function boot () {
   await swapScenario()
   mountSections()
   trackProgress()
+
+  // The rail wraps differently at every width and whenever a control appears
+  // (the dimension toggle unhides below), so re-measure rather than assume.
+  syncRailHeight()
+  window.addEventListener('resize', syncRailHeight, { passive: true })
+  if (rail && 'ResizeObserver' in window) new window.ResizeObserver(syncRailHeight).observe(rail)
 
   railPopulation.addEventListener('change', async () => {
     state.population = railPopulation.value
@@ -186,6 +297,7 @@ async function boot () {
     syncDifficultyEnabled()
   }
   dimensionControl.hidden = !hasDimension2d(index)
+  syncRailHeight()
   railDimension.addEventListener('click', async (event) => {
     const button = event.target.closest('button[data-dimension]')
     if (!button || button.dataset.dimension === state.dimension) return
