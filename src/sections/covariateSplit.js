@@ -186,8 +186,13 @@ export function covariateSplit ({ armId, number, eyebrow }) {
           color: index.truth_color },
         { id: 'global_target', label: 'Estimated population mean μ — where no covariate would pull',
           marker: 'rule-dashed', color: tokens.get('none').color },
-        { id: 'truth', label: 'Truth', marker: 'times', color: index.truth_color }
-      ].map((i) => ({ ...i, on: wasOn[i.id] !== false }))
+        { id: 'truth', label: 'Truth', marker: 'times', color: index.truth_color },
+        // 2D only, off by default: the number beside a × and beside a point is
+        // what ties them together in the plane. In 1D the row already does.
+        ...(twoD
+          ? [{ id: 'labels', label: 'Player numbers', marker: 'text', color: '#55606c', on: false }]
+          : [])
+      ].map((i) => ({ ...i, on: i.id in wasOn ? wasOn[i.id] : i.on !== false }))
       legend = layerLegend(items, () => render())
       legendKey = key
       el.querySelector('[data-role="legend"]').innerHTML = ''
@@ -241,10 +246,11 @@ export function covariateSplit ({ armId, number, eyebrow }) {
          each skill — the place its players get pulled toward; ${trueSentence}.
          The blue dashed crosshair is the estimated population mean μ a model
          without any covariate would have used. The grey arrow is the pull: from
-         what the player's own plays say to where the model put them. The
-         buttons above hide or show players by how many plays they have; the
-         panels and their diamonds stay
-         put.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}${mismatchSentence}`
+         what the player's own plays say to where the model put them. Turn on
+         Player numbers in the legend to see which × belongs to which point:
+         the same number sits beside both. The buttons above hide or show
+         players by how many plays they have; the panels and their diamonds
+         stay put.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}${mismatchSentence}`
       : `One panel per assigned group. The solid line in each panel is that group's
          estimated mean — the place its players get pulled toward. ${trueSentence}.
          The blue dashed line is the estimated population mean μ a model without

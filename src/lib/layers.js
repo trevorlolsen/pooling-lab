@@ -24,7 +24,9 @@ const SWATCH = {
   rule: (c) => `<path d="M8 1 V15" stroke="${c}" stroke-width="2.5" fill="none"/>`,
   'rule-dashed': (c) => `<path d="M8 1 V15" stroke="${c}" stroke-width="2" stroke-dasharray="3 2.5" fill="none"/>`,
   area: (c) => `<rect x="1.5" y="4" width="13" height="8" rx="1.5" fill="${c}" fill-opacity="0.35" stroke="${c}" stroke-opacity="0.6"/>`,
-  box: (c) => `<rect x="3" y="4.5" width="10" height="7" rx="1" fill="${c}" fill-opacity="0.35" stroke="${c}" stroke-width="1.4"/><path d="M1 8 H3 M13 8 H15" stroke="${c}" stroke-width="1.4"/>`
+  box: (c) => `<rect x="3" y="4.5" width="10" height="7" rx="1" fill="${c}" fill-opacity="0.35" stroke="${c}" stroke-width="1.4"/><path d="M1 8 H3 M13 8 H15" stroke="${c}" stroke-width="1.4"/>`,
+  // A text layer: the player-number labels in the two-skill charts.
+  text: (c) => `<text x="8" y="12" text-anchor="middle" font-size="11" font-weight="700" font-family="Inter, system-ui, sans-serif" fill="${c}">12</text>`
 }
 
 function swatch (marker, color) {

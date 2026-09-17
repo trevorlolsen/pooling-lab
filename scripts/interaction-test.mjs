@@ -373,6 +373,30 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
     ok(snap('shrinkage') === before, '2D: "Show all" should restore the ellipse chart exactly')
   }
 
+  // Player numbers: a 2D-only legend entry, off by default, that prints each
+  // player's id beside their marks so a × can be matched to its point.
+  for (const id of ['shrinkage', 'covariate-correct']) {
+    const sec = document.getElementById(id)
+    const entry = sec.querySelector('.legend-toggle button[data-layer="labels"]')
+    ok(entry, `2D: ${id} should offer a Player numbers layer`)
+    ok(entry?.getAttribute('aria-pressed') === 'false', `2D: ${id} player numbers should start off`)
+    const labelsOf = () => [...chartSvg(id).querySelectorAll('text')]
+      .filter((t) => /^\d+$/.test(t.textContent.trim())).length
+    const before = { svg: snap(id), labels: labelsOf() }
+    entry.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    await settle(80)
+    ok(snap(id) !== before.svg, `2D: ${id} turning on player numbers should redraw the chart`)
+    // Axis ticks are numbers too, so compare against the count before: at
+    // least one label per shown player must have been added.
+    ok(labelsOf() >= before.labels + 40, `2D: ${id} should print a number beside every player, added ${labelsOf() - before.labels}`)
+    sec.querySelector('.legend-toggle button[data-layer="labels"]')
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    await settle(80)
+    ok(snap(id) === before.svg, `2D: ${id} turning player numbers off should restore the chart exactly`)
+  }
+  ok(!document.getElementById('shrinkage').querySelector('.band-filter button[data-band="all"]:not([hidden])'),
+    '2D: the band filter should still be at show-all after the label checks')
+
   // Clicking a player in 2D should quote their numbers in BOTH skills.
   setState({ selectedPlayer: 12 }, 'select')
   const detail = document.getElementById('shrinkage')
@@ -429,6 +453,8 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   remount()
   await settle(400)
   ok(snap('shrinkage').length > 0, 'back to 1D: the shrinkage chart should render again')
+  ok(!document.getElementById('shrinkage').querySelector('.legend-toggle button[data-layer="labels"]'),
+    'back to 1D: the Player numbers entry is 2D-only and should be gone')
   ok(/One row per player/.test(
     document.getElementById('shrinkage').querySelector('[data-role="caption"]')?.textContent ?? ''),
   'back to 1D: the shrinkage caption should be the 1D one')

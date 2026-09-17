@@ -174,16 +174,50 @@ export function playerEllipses ({
     )
   }
 
+  // Player numbers, off by default: forty of them are clutter. But in the
+  // plane nothing says which × is whose -- in 1D the row does that -- so the
+  // number is printed in the mark's own colour beside the truth and beside the
+  // estimate, and matching numbers tie the two together.
+  if (on('labels')) {
+    const text = {
+      text: (d) => String(d.child_id),
+      fontSize: 9, fontWeight: 600, textAnchor: 'start', dx: 6, dy: -5,
+      opacity: dim, pointerEvents: 'none'
+    }
+    if (on('partial', 2)) {
+      marks.push(Plot.text(rows.filter((d) => d.pp1 != null), {
+        x: 'pp1', y: 'pp2', fill: tokens.get('none').color, ...text
+      }))
+    } else if (on('no_pool')) {
+      marks.push(Plot.text(rows.filter((d) => d.np1 != null), {
+        x: 'np1', y: 'np2', fill: tokens.get('no_pool').color, ...text
+      }))
+    }
+    if (on('truth', 4)) {
+      marks.push(Plot.text(rows, { x: 't1', y: 't2', fill: index.truth_color, ...text }))
+    }
+  }
+
   // Selection ring, drawn last so it sits on top. It follows the partial mean
-  // once that exists, and the no-pooling mean before then.
+  // once that exists, and the no-pooling mean before then. Once truth is on
+  // the chart, a dotted link runs from that estimate to the player's × -- one
+  // player's error, followed without labelling all forty.
   const selected = rows.filter((d) => d.selected)
   if (selected.length) {
     const showPartial = on('partial', 2)
+    const ex = showPartial ? 'pp1' : 'np1'
+    const ey = showPartial ? 'pp2' : 'np2'
+    if (on('truth', 4)) {
+      marks.push(
+        Plot.link(selected.filter((d) => d[ex] != null), {
+          x1: ex, y1: ey, x2: 't1', y2: 't2',
+          stroke: '#111', strokeWidth: 1, strokeDasharray: '2 3'
+        }),
+        Plot.dot(selected, { x: 't1', y: 't2', r: 8, stroke: '#111', strokeWidth: 1, strokeDasharray: '2 2', fill: 'none' })
+      )
+    }
     marks.push(
-      Plot.dot(selected, {
-        x: showPartial ? 'pp1' : 'np1', y: showPartial ? 'pp2' : 'np2',
-        r: 8, stroke: '#111', strokeWidth: 1.5, fill: 'none'
-      })
+      Plot.dot(selected, { x: ex, y: ey, r: 8, stroke: '#111', strokeWidth: 1.5, fill: 'none' })
     )
   }
 

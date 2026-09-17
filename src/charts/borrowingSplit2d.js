@@ -242,6 +242,25 @@ export function borrowingSplit2d ({
     )
   }
 
+  // Player numbers, off by default, in the mark's own colour beside the truth
+  // and beside the estimate: matching numbers tie a × to its point, which
+  // nothing else in the plane does (see playerEllipses).
+  if (on('labels')) {
+    const text = {
+      text: (d) => String(d.child_id), fx: 'group',
+      fontSize: 9, fontWeight: 600, textAnchor: 'start', dx: 6, dy: -5,
+      pointerEvents: 'none'
+    }
+    if (on('pooled')) {
+      marks.push(Plot.text(rows.filter((d) => d.pp1 != null), { x: 'pp1', y: 'pp2', fill: armColor, ...text }))
+    } else if (on('no_pool')) {
+      marks.push(Plot.text(rows.filter((d) => d.np1 != null), { x: 'np1', y: 'np2', fill: tokens.get('no_pool').color, ...text }))
+    }
+    if (on('truth')) {
+      marks.push(Plot.text(rows, { x: 't1', y: 't2', fill: index.truth_color, ...text }))
+    }
+  }
+
   // Near-square panels: the facet band (d3 paddingInner 0.1) gives each panel
   // 0.9·W/(G − 0.1) of the inner width; ask for that much height, capped.
   const marginLeft = 56; const marginRight = 16; const marginTop = 28; const marginBottom = 40

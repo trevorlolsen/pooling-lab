@@ -87,7 +87,8 @@ function captionText (twoD, view) {
   const base = twoD
     ? 'One point per player, in both skills at once. ' +
       'The grey arrow is the pull: from what the player\'s own plays say to where the model put them. ' +
-      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart. ' +
+      'Click a player to follow them; the black ring marks your choice, and once truth is drawn a dotted line runs from their estimate to their ×. Their numbers appear below the chart. ' +
+      'Turn on Player numbers in the legend to see which × belongs to which point: the same number sits beside both. ' +
       'The buttons above hide or show players by how many plays they have; the numbers below the chart always count everyone.'
     : 'One row per player, grouped by how many serves we watched. Rows are sorted by their no-pooling estimate. ' +
       'The grey segment is the pull: from what the player\'s own serves say to where the model put them. ' +
@@ -130,7 +131,12 @@ function legendItems ({ twoD, view, tokens, index }) {
       label: twoD ? 'True population mean μ (dashed crosshair)' : 'True population mean μ',
       marker: 'rule-dashed',
       color: index.truth_color
-    }
+    },
+    // 2D only, and off by default: in the plane nothing else says which × is
+    // whose. In 1D the row does, so the entry would be noise there.
+    ...(twoD
+      ? [{ id: 'labels', label: 'Player numbers', marker: 'text', color: '#55606c', on: false }]
+      : [])
   ]
 }
 
@@ -211,8 +217,10 @@ export function adaptiveShrinkage () {
     }
     if (!legend || legendView !== state.view) {
       const wasOn = legend ? legend.get() : {}
+      // A rebuild keeps the reader's toggles; a fresh legend uses each entry's
+      // own default (on, except where the entry says otherwise).
       const items = legendItems({ twoD, view: state.view, tokens, index })
-        .map((i) => ({ ...i, on: wasOn[i.id] !== false }))
+        .map((i) => ({ ...i, on: i.id in wasOn ? wasOn[i.id] : i.on !== false }))
       legend = layerLegend(items, () => render())
       legendView = state.view
       const host = el.querySelector('[data-role="legend"]')
