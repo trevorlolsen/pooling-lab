@@ -27,7 +27,7 @@ export function convergence () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">3 — The same player, watched longer</p>
+        <p class="eyebrow">4 — The same player, watched longer</p>
         <h2>Watch one player earn the model's trust</h2>
         <p>Everything so far compared <em>different</em> players who happened to
            have different amounts of data — which leaves the obvious objection

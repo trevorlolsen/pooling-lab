@@ -12,6 +12,9 @@ import { join, dirname } from 'node:path'
 import {
   zip, interpolateGrid, armEstimates, borrowingTargets
 } from '../src/lib/transforms.js'
+import {
+  thetaGrid, logNormalPrior, accumulate, normalize, summarize, predictedRate, updateSequence, mulberry32
+} from '../src/lib/bayesGrid.js'
 
 const D = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data')
 const read = (p) => JSON.parse(readFileSync(join(D, p), 'utf8'))
@@ -82,6 +85,123 @@ ok(distinctTargets(bNone) === 1, 'partial pooling shrinks everyone toward one ta
 ok(distinctTargets(bCorrect) === 2, 'the correct covariate splits that into one target per group')
 console.log('borrowing targets: none=%d distinct, correct=%d distinct',
   distinctTargets(bNone), distinctTargets(bCorrect))
+
+// --- bayesian updating grid reproduces the shipped posteriors ------------
+//
+// The section-3 walk-through does not read a precomputed frame: it recomputes
+// the posterior in the browser, one serve at a time, from `observations`. That
+// is only honest if the arithmetic lands on the same answer Stan did, so this
+// checks it against EVERY scenario -- 25 payloads, 40 players each.
+//
+// On the per-player bounds: they look loose because a handful of n=5 players
+// are near-separated (0 or 5 makes), and their posteriors are strongly skewed
+// with a long tail. There the 4,000-draw MCMC summary is the noisier of the
+// two, not the grid -- widening the grid to [-20, 20] moves the grid's answer
+// by 0.002 while the gap to Stan stays at 0.088. So the per-player bound
+// tolerates those outliers and the MEDIAN bound below is what actually pins
+// the arithmetic: a wrong likelihood, prior or serve order shifts every
+// player at once, which a median of 1,000 comparisons catches immediately.
+{
+  const g = thetaGrid()
+  const rowsByChild = (o) => {
+    const m = new Map()
+    for (let i = 0; i < o.child_id.length; i++) {
+      if (!m.has(o.child_id[i])) m.set(o.child_id[i], [])
+      m.get(o.child_id[i]).push(i)
+    }
+    return m
+  }
+
+  let dm = 0; let ds = 0; let dq = 0; let dc = 0; let de = 0
+  const meanDevs = []
+  let scenarios = 0
+
+  for (const p of index.populations) {
+    for (const id of p.scenario_ids) {
+      const s = read(`scenarios/${id}.json`)
+      const o = s.observations
+      const rowsFor = rowsByChild(o)
+      const post = (rows, mean, sd) =>
+        summarize(normalize(accumulate(logNormalPrior(g, mean, sd), g, o, rows), g), g)
+      scenarios++
+
+      // No pooling: prior N(0,2), this player's serves only.
+      const np = s.arms.no_pool.players
+      for (let k = 0; k < np.child_id.length; k++) {
+        const t = post(rowsFor.get(np.child_id[k]), 0, 2)
+        const dev = Math.abs(t.mean - np.theta_mean[k])
+        meanDevs.push(dev)
+        dm = Math.max(dm, dev)
+        ds = Math.max(ds, Math.abs(t.sd - np.theta_sd[k]))
+        dq = Math.max(dq, Math.abs(t.low - np.theta_low[k]), Math.abs(t.high - np.theta_high[k]))
+      }
+
+      // Complete pooling: prior N(0,2), every row in the scenario. Well
+      // conditioned by construction -- 650 serves -- so it stays tight.
+      const all = [...Array(o.y.length).keys()]
+      dc = Math.max(dc, Math.abs(post(all, 0, 2).mean - s.arms.complete.players.theta_mean[0]))
+
+      // Empirical Bayes: prior N(mu-hat, tau-hat), this player's serves only.
+      // This is the approximation section 3 shows for partial pooling, so how
+      // close it lands to the real hierarchical fit is a teaching claim.
+      const { mu, tau } = s.arms.none.population
+      const nn = s.arms.none.players
+      for (let k = 0; k < nn.child_id.length; k++) {
+        de = Math.max(de, Math.abs(post(rowsFor.get(nn.child_id[k]), mu.mean, tau.mean).mean - nn.theta_mean[k]))
+      }
+    }
+  }
+
+  meanDevs.sort((a, b) => a - b)
+  const median = meanDevs[Math.floor(meanDevs.length / 2)]
+
+  ok(median < 0.015, `grid no-pooling means match Stan typically (median ${median.toFixed(4)})`)
+  ok(dm < 0.08, `grid no-pooling means match Stan everywhere (worst ${dm.toFixed(4)})`)
+  ok(ds < 0.12, `grid no-pooling sds match Stan (worst ${ds.toFixed(4)})`)
+  ok(dq < 0.30, `grid no-pooling quantiles match Stan (worst ${dq.toFixed(4)})`)
+  ok(dc < 0.01, `grid complete-pooling mean matches Stan (worst ${dc.toFixed(4)})`)
+  ok(de < 0.05, `empirical-Bayes prior approximates the hierarchical fit (worst ${de.toFixed(4)})`)
+
+  console.log('bayes grid: %d scenarios, %d players — no-pool Δmean median %s / worst %s, complete %s, EB %s',
+    scenarios, meanDevs.length, median.toFixed(4), dm.toFixed(4), dc.toFixed(4), de.toFixed(4))
+}
+
+// --- updating is order-invariant, and predicts the rate it should --------
+{
+  const g = thetaGrid()
+  const o = sc.observations
+  const rowsFor = new Map()
+  for (let i = 0; i < o.child_id.length; i++) {
+    if (!rowsFor.has(o.child_id[i])) rowsFor.set(o.child_id[i], [])
+    rowsFor.get(o.child_id[i]).push(i)
+  }
+  const post = (rows, mean, sd) =>
+    summarize(normalize(accumulate(logNormalPrior(g, mean, sd), g, o, rows), g), g)
+
+  // Order invariance: the same serves in any order give the same posterior.
+  // The section offers a "shuffle" control on exactly this claim.
+  const rows = rowsFor.get(sc.arms.no_pool.players.child_id[30])
+  const rnd = mulberry32(7)
+  const shuffled = [...rows]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  const a = post(rows, 0, 2); const b = post(shuffled, 0, 2)
+  ok(Math.abs(a.mean - b.mean) < 1e-9 && Math.abs(a.sd - b.sd) < 1e-9,
+    'updating is order-invariant')
+
+  // The predictive rate, not plogis(mean theta), is what the sample mean converges to.
+  const frames = updateSequence({ grid: g, prior: { mean: 0, sd: 2 }, observations: o, rows })
+  const last = frames[frames.length - 1]
+  ok(Math.abs(last.predictedRate - last.sampleRate) < 0.02,
+    `predictive rate tracks the sample rate at n=${last.n}`)
+  ok(frames.length === rows.length + 1, 'updateSequence emits a prior-only frame at n=0')
+  ok(frames[0].n === 0 && frames[0].like === null, 'frame 0 is the prior, with no likelihood')
+
+  console.log('bayes grid: order-invariant; predictive rate %s vs sample rate %s at n=%d',
+    last.predictedRate.toFixed(3), last.sampleRate.toFixed(3), last.n)
+}
 
 // --- every scenario matches what index.json advertises -------------------
 let n = 0

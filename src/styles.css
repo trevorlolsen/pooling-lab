@@ -307,3 +307,77 @@ h3.subhead {
   html { scroll-behavior: auto; }
   .step, .progress { transition: none; }
 }
+
+/* --- section 3: stepping through one player's serves ------------------- */
+
+/* Range inputs had no rule at all before this section: they inherited only the
+   shared font family at the top of the file and rendered at the browser's
+   default width, which is wider than the rest of the control bar. */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11rem;
+  max-width: 100%;
+  height: 1.1rem;
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rule);
+}
+input[type='range']::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rule);
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; height: 14px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: var(--no-pool);
+}
+input[type='range']::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: var(--no-pool);
+}
+input[type='range']:focus-visible { outline: 2px solid var(--partial); outline-offset: 3px; }
+
+/* The step controls sit next to a <select> and two segmented buttons, so the
+   label has to line them all up on one baseline. Scoped to this section: the
+   evidence section's .controls carries a long sentence that must still wrap. */
+#belief .controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+#belief [data-role='step-readout'] { white-space: nowrap; }
+
+/* Six layers is two more than any other section's legend, so the entries need
+   room to wrap onto a second row without the rows touching. Scoped to #belief:
+   the other legends fit on one line and are not this section's to restyle. */
+#belief .legend-toggle { display: flex; flex-wrap: wrap; gap: 0.3rem 0.35rem; }
+
+/* The belief panel and its likelihood strip are two separate <svg>s that share
+   an x domain and a left margin. Stacking them with no gap is what makes the
+   vertical reading -- this likelihood, applied to that prior -- hold. */
+.belief-update { display: block; }
+.belief-update svg { display: block; max-width: 100%; height: auto; }
+.belief-update svg + svg { margin-top: -6px; }
+
+@media (max-width: 860px) {
+  /* Stacked, the control bar is the thing that breaks first: it holds a select,
+     two arrows, a slider and two buttons. Let the slider take a whole row and
+     stop the notes from forcing a horizontal scroll. */
+  #belief .controls { gap: 0.5rem 0.7rem; }
+  #belief .controls input[type='range'] { width: 100%; flex: 1 1 100%; }
+}

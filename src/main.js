@@ -3,6 +3,7 @@ import { loadIndex, loadScenario, scenarioId, armTokens, hasDimension2d } from '
 import { state, setState } from './state.js'
 import { theTeam } from './sections/team.js'
 import { adaptiveShrinkage } from './sections/shrinkage.js'
+import { beliefUpdateSection } from './sections/beliefUpdate.js'
 import { convergence } from './sections/convergence.js'
 import { teamSweep } from './sections/teamSweep.js'
 import { correctCovariateSplit, wrongCovariateSplit } from './sections/covariateSplit.js'
@@ -20,7 +21,7 @@ const difficultyValue = document.getElementById('difficulty-value')
 const difficultyControl = document.getElementById('difficulty-control')
 const progress = document.getElementById('progress')
 
-const SECTIONS = [theTeam, adaptiveShrinkage, convergence, teamSweep,
+const SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence, teamSweep,
   correctCovariateSplit, wrongCovariateSplit, evidence]
 let mounted = []
 

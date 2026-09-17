@@ -42,6 +42,7 @@ const { state, setState } = await import('../src/state.js')
 const { armTokens } = await import('../src/data.js')
 const { theTeam } = await import('../src/sections/team.js')
 const { adaptiveShrinkage } = await import('../src/sections/shrinkage.js')
+const { beliefUpdateSection } = await import('../src/sections/beliefUpdate.js')
 const { evidence } = await import('../src/sections/evidence.js')
 const { correctCovariateSplit, wrongCovariateSplit } =
   await import('../src/sections/covariateSplit.js')
@@ -69,7 +70,7 @@ state.difficulty = 0
 
 // Mount exactly the way main.js does.
 const mounted = []
-for (const section of [theTeam, adaptiveShrinkage,
+for (const section of [theTeam, adaptiveShrinkage, beliefUpdateSection,
   correctCovariateSplit, wrongCovariateSplit, evidence]) {
   const { el, mount } = section()
   app.appendChild(el)
@@ -247,7 +248,7 @@ ok(/one population|sample from/i.test(document.getElementById('team').textConten
 }
 
 // --- band filter hides players by observation count ---------------------
-// Sections 2, 5 and 6 each carry a filter on the 5/10/20/30 ladder. Hiding a
+// Sections 2, 6 and 7 each carry a filter on the 5/10/20/30 ladder. Hiding a
 // band must remove those players (and, in section 2, their facet) from the
 // chart, must leave the takeaway alone, and must be fully reversible.
 {
@@ -306,13 +307,103 @@ ok(/one population|sample from/i.test(document.getElementById('team').textConten
     ok(/20 serves/.test(snap('shrinkage')), 'shrinkage: the other facets should keep their labels')
     await clickBand('shrinkage', 'all')
   }
-  console.log('  band filter: 5/10/20/30 buttons on sections 2, 5 and 6; hide, floor at one band, show all')
+  console.log('  band filter: 5/10/20/30 buttons on sections 2, 6 and 7; hide, floor at one band, show all')
 }
 
 // --- player selection ---------------------------------------------------
 const beforeSelect = snap('shrinkage')
 setState({ selectedPlayer: 12 }, 'select')
 ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrinkage chart')
+
+// --- bayesian updating: stepping, shuffling, and the prior swap ----------
+// Known harness limitation: jsdom has no IntersectionObserver, so trackSteps
+// falls back to fire(0) (lib/scroll.js:42) and this harness only ever exercises
+// the belief scrolly at step 0. Step coverage for the belief panel comes from
+// render-test.mjs, which calls the chart module directly across steps. Do NOT
+// add an IntersectionObserver stub to widen this: three existing sections
+// depend on the current fallback and would change behaviour under one.
+{
+  const sec = document.getElementById('belief')
+  ok(sec, 'the belief section should mount')
+  ok(snap('belief').length > 0, 'the guided belief panel should render on mount')
+
+  // The control bar drives the free-play figure, not the pinned scrolly one, so
+  // these snapshot [data-role="free-chart"] rather than going through snap(),
+  // which is fixed to [data-role="chart"].
+  const freeSnap = () => sec.querySelector('[data-role="free-chart"] svg')?.outerHTML ?? ''
+  const traceSnap = () => sec.querySelector('[data-role="trace"] svg')?.outerHTML ?? ''
+  const takeawayOf = (el, role) => el.querySelector(`[data-role="${role}"]`)?.textContent ?? ''
+  const click = (node) => node.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+
+  const before = freeSnap()
+  ok(before.length > 0, 'the free-play belief panel should render on mount')
+  ok(traceSnap().length > 0, 'the rate trace should render on mount')
+
+  const next = sec.querySelector('[data-role="controls"] button[data-act="next"]')
+  ok(next, 'the control bar should offer a next-serve button')
+  click(next)
+  await settle(80)
+  ok(freeSnap() !== before, 'advancing a serve should redraw the belief panel')
+  click(sec.querySelector('[data-role="controls"] button[data-act="prev"]'))
+  await settle(80)
+  ok(freeSnap() === before, 'stepping back should restore the previous drawing exactly')
+
+  // Shuffle changes the path but not the destination.
+  const select = sec.querySelector('[data-role="controls"] select')
+  ok(select, 'the control bar should offer a player selector')
+  select.value = String(31)
+  select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  await settle(80)
+  ok(state.selectedPlayer === 31, 'choosing a player should publish the selection')
+  ok(/Player 31\b/.test(takeawayOf(sec, 'rate-takeaway')),
+    'the rate readout should name the selected player')
+
+  const endText = takeawayOf(sec, 'rate-takeaway')
+  const priorText = takeawayOf(sec, 'prior-takeaway')
+  const beforeTrace = traceSnap()
+  click(sec.querySelector('[data-act="shuffle"]'))
+  await settle(80)
+  ok(takeawayOf(sec, 'rate-takeaway') === endText,
+    'shuffling the order must not change the final readout')
+  ok(takeawayOf(sec, 'prior-takeaway') === priorText,
+    'shuffling the order must not change where the prior swap lands')
+  ok(traceSnap() !== beforeTrace, 'shuffling should change the path the running rate takes')
+  click(sec.querySelector('[data-act="reset"]'))
+  await settle(80)
+  ok(traceSnap() === beforeTrace, 'reset should restore the true serve order')
+
+  // Changing player must move the no-pooling curve and leave complete pooling put.
+  ok(/\bcomplete pooling\b/i.test(sec.querySelector('[data-role="free-caption"]').textContent),
+    'the caption should name the complete-pooling layer')
+  const beforePlayer = freeSnap()
+  select.value = String(4)
+  select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  await settle(80)
+  ok(freeSnap() !== beforePlayer, 'changing player should redraw the belief panel')
+  ok(/Player 4\b/.test(takeawayOf(sec, 'prior-takeaway')),
+    'the prior-swap takeaway should follow the selected player')
+
+  // The 2x2's partial-pooling row is blank until the prior-swap section is
+  // reached; with no IntersectionObserver here, renderWhenNear fires at once.
+  ok(/N\(.*\).*learned from the team/.test(
+    sec.querySelector('[data-role="partial-row"]')?.textContent ?? ''),
+  'the 2x2 should fill in the partial-pooling prior')
+
+  // The Scale control reaches this section: it restates the same belief as a
+  // success rate rather than bending the density through plogis.
+  const beforeScale = sec.querySelector('[data-role="free-caption"]').textContent
+  setState({ scale: 'theta' }, 'scale')
+  await settle(40)
+  ok(sec.querySelector('[data-role="free-caption"]').textContent !== beforeScale,
+    'changing scale should restate the belief in the caption')
+  setState({ scale: 'probability' }, 'scale')
+  await settle(40)
+  ok(sec.querySelector('[data-role="free-caption"]').textContent === beforeScale,
+    'switching the scale back should restore the caption')
+
+  console.log('  belief: stepping redraws, shuffle preserves the destination, ' +
+    'the prior swap and the rate readout follow the selected player')
+}
 
 // --- the two-skill story ------------------------------------------------
 // The dimension toggle swaps the payload shape, so main.js remounts every
@@ -323,7 +414,7 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
 if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   const { convergence } = await import('../src/sections/convergence.js')
   const { teamSweep } = await import('../src/sections/teamSweep.js')
-  const SECTIONS = [theTeam, adaptiveShrinkage, convergence, teamSweep,
+  const SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence, teamSweep,
     correctCovariateSplit, wrongCovariateSplit, evidence]
   const remount = () => {
     for (const teardown of mounted) teardown()
@@ -353,6 +444,15 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   for (const id of ['team', 'shrinkage', 'covariate-correct', 'covariate-wrong',
     'evidence', 'convergence', 'team-sweep']) {
     ok(chartSvg(id), `2D: ${id} should render a chart on mount`)
+  }
+
+  // The belief walk-through is one skill at a time, so under the two-skill
+  // toggle it degrades to a note rather than drawing a surface.
+  {
+    const belief = document.getElementById('belief')
+    ok(belief, '2D: the belief section should still mount')
+    ok(belief.querySelector('.note'), '2D: the belief section should explain why it is absent')
+    ok(!chartSvg('belief'), '2D: the belief section should draw no chart')
   }
 
   // The band filter follows the dimension: plays, not serves, and it still

@@ -258,7 +258,7 @@ export function theTeam () {
     const labelStep = `Nothing above depends on which label the model is later given.
       ${cov.correct ? 'The <em>correct</em> label is the true group. ' : ''}${wrongText}
       Every team is a fresh draw of all three steps at its own seed; the fits in
-      sections 5 and 6 see byte-identical serves and differ only in the label.`
+      sections 6 and 7 see byte-identical serves and differ only in the label.`
 
     const table = `
       <table class="metric-table figures dgp-table">

@@ -11,7 +11,7 @@ export const state = {
   dimension: '1d',      // '1d' | '2d' -- one skill per player, or two
   scenario: null,       // the loaded payload; in 2D it carries `skills[0..1]`, each a 1D payload
   index: null,
-  arm: 'correct',       // which covariate arm section 5+ displays
+  arm: 'correct',       // which covariate arm section 6+ displays
   scale: 'theta',       // 'probability' | 'theta' -- the parameter space first, d* is opt-in
   view: 'point',        // 'point' | 'posterior' -- point estimate or full density
   difficulty: 0,        // d*, continuous over the shipped grid

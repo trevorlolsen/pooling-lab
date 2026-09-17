@@ -28,6 +28,12 @@ globalThis.getComputedStyle = dom.window.getComputedStyle
 
 const { populationDensity } = await import('../src/charts/populationDensity.js')
 const { playerRows } = await import('../src/charts/playerRows.js')
+// Observable Plot reads `document` at module scope, so every chart module has
+// to be imported after the globals above are installed. bayesGrid.js is pure,
+// but it rides along here so the belief block reads as one unit.
+const { beliefUpdate } = await import('../src/charts/beliefUpdate.js')
+const { beliefTrace } = await import('../src/charts/beliefTrace.js')
+const { thetaGrid, updateSequence } = await import('../src/lib/bayesGrid.js')
 
 const D = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data')
 const read = (p) => JSON.parse(readFileSync(join(D, p), 'utf8'))
@@ -275,6 +281,58 @@ const sc = read('scenarios/distinct__20260914.json')
 const at0 = playerRows({ scenario: sc, index, tokens, scale: 'probability', difficulty: 0, step: 4, width: 700 })
 const at1 = playerRows({ scenario: sc, index, tokens, scale: 'probability', difficulty: 1.2, step: 4, width: 700 })
 ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
+
+// --- belief update ------------------------------------------------------
+// The section drives these modules by scroll step and by a slider, so every
+// step has to construct on its own. jsdom has no IntersectionObserver, so the
+// interaction harness only ever reaches step 0 -- step coverage lives here.
+{
+  const sc = read('scenarios/one_population__20260914.json')
+  const rowsForPlayer = (o, child) => {
+    const rows = []
+    for (let i = 0; i < o.child_id.length; i++) if (o.child_id[i] === child) rows.push(i)
+    return rows
+  }
+  const g = thetaGrid()
+  const rows = rowsForPlayer(sc.observations, 31) // the 30-serve walk-through player
+  const frames = updateSequence({ grid: g, prior: { mean: 0, sd: 2 }, observations: sc.observations, rows })
+
+  for (const step of [0, 1, 5, 29, 30]) {
+    const fig = beliefUpdate({ frames, step, domain: index.domains.theta, width: 700 })
+    const svgs = fig.querySelectorAll('svg')
+    ok(svgs.length === 2, `belief step ${step}: belief panel + likelihood strip (got ${svgs.length})`)
+    ok(count(svgs[0], 'path') > 0, `belief step ${step}: the posterior curve should be drawn`)
+    // The prior-only frame has no serve, so the likelihood strip must be empty.
+    ok(count(svgs[1], 'path') === (step === 0 ? 0 : 1),
+      `belief step ${step}: likelihood drawn only once a serve exists`)
+  }
+
+  // Every step must look different from the one before it.
+  const html = [0, 1, 5, 29].map((s) =>
+    beliefUpdate({ frames, step: s, domain: index.domains.theta, width: 700 }).outerHTML)
+  ok(new Set(html).size === html.length, 'each step should redraw the belief panel')
+
+  // The display domain must widen to hold a wide early posterior rather than clip it.
+  const wide = beliefUpdate({ frames, step: 1, domain: index.domains.theta, width: 700 })
+  const dom1 = wide.querySelector('svg').__domain
+  ok(dom1[0] <= frames[1].summary.mean - 3 * frames[1].summary.sd,
+    'an early wide posterior must not be clipped by the default theta domain')
+
+  // Layers suppress.
+  const bare = beliefUpdate({ frames, step: 10, domain: index.domains.theta, width: 700, layers: { ghosts: false } })
+  const full = beliefUpdate({ frames, step: 10, domain: index.domains.theta, width: 700 })
+  ok(bare.outerHTML !== full.outerHTML, 'turning off the ghost trail should change the drawing')
+
+  const trace = beliefTrace({ frames, width: 700 })
+  const tsvg = trace.tagName === 'svg' ? trace : trace.querySelector('svg')
+  ok(tsvg, 'belief trace should render an svg')
+  ok(/rate/i.test(tsvg.textContent), 'the trace axis should be labelled as a rate')
+  const domAt = (s) => beliefUpdate({ frames, step: s, domain: index.domains.theta, width: 700 })
+    .querySelector('svg').__domain
+  console.log(`  belief update ok (${frames.length} frames, player 31), domain ` +
+    `[${domAt(1).map((v) => v.toFixed(2)).join(', ')}] at step 1 -> ` +
+    `[${domAt(30).map((v) => v.toFixed(2)).join(', ')}] at step 30`)
+}
 
 // --- the per-individual convergence sweep --------------------------------
 if (existsSync(join(D, 'convergence.json'))) {

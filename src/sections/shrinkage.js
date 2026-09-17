@@ -8,7 +8,7 @@ import { layerLegend } from '../lib/layers.js'
 import { bandFilter, scenarioBands } from '../lib/bandFilter.js'
 
 /**
- * Section 3 — the flagship. One chart, pinned, carrying a five-beat argument as
+ * Section 2 — the flagship. One chart, pinned, carrying a five-beat argument as
  * the prose scrolls past it.
  *
  * This is the only place the sticky-graphic pattern earns its complexity: the

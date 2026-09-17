@@ -23,7 +23,7 @@ export function evidence () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">7 — Did it help?</p>
+        <p class="eyebrow">8 — Did it help?</p>
         <h2 data-role="headline">Shrinkage is a mechanism. Was it an improvement?</h2>
         <p>Moving an estimate is not the same as improving it. Because we
            simulated this population, we know every player's true ability — so we

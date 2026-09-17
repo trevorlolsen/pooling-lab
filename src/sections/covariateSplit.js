@@ -174,7 +174,7 @@ export function covariateSplit ({ armId, number, eyebrow }) {
         { id: 'pooled', label: 'Partial pooling with this grouping',
           marker: playerMarker('dot'), color: armColor },
         // Only the scrambled covariate puts anyone in the wrong panel, so only
-        // section 6 gets the entry. It toggles the open-dot distinction; the
+        // section 7 gets the entry. It toggles the open-dot distinction; the
         // players themselves stay on the pooled layer.
         ...(armId === 'wrong'
           ? [{ id: 'mismatch', label: 'Assigned to the wrong group', marker: 'open', color: armColor }]
@@ -291,7 +291,7 @@ export function covariateSplit ({ armId, number, eyebrow }) {
 }
 
 export const correctCovariateSplit = () =>
-  covariateSplit({ armId: 'correct', number: '5', eyebrow: 'The right grouping' })
+  covariateSplit({ armId: 'correct', number: '6', eyebrow: 'The right grouping' })
 
 export const wrongCovariateSplit = () =>
-  covariateSplit({ armId: 'wrong', number: '6', eyebrow: 'The wrong grouping' })
+  covariateSplit({ armId: 'wrong', number: '7', eyebrow: 'The wrong grouping' })

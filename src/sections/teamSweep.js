@@ -8,7 +8,7 @@ import { sweepWidths, sweepRidges, orderedTeams, coverageCurves } from '../chart
 /**
  * The team you have, and the population you don't.
  *
- * Section 3 showed one player earning the model's trust. This section asks
+ * Section 4 showed one player earning the model's trust. This section asks
  * what watching the whole team longer buys: eight players observed 5 ... 1000
  * times each, refitted at every step. The team's own average becomes known
  * almost exactly. The population mean μ does not -- its interval plateaus at
@@ -26,7 +26,7 @@ export function teamSweep () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">4 — The team you have, and the population you don't</p>
+        <p class="eyebrow">5 — The team you have, and the population you don't</p>
         <h2>Watch the whole team longer, and see what stops improving</h2>
         <p>One player, watched longer, converges on their own true ability. Now
            watch all eight, from a handful of serves each to a thousand, and
