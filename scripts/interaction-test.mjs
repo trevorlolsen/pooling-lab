@@ -348,6 +348,45 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   await settle(80)
   ok(freeSnap() === before, 'stepping back should restore the previous drawing exactly')
 
+  // --- the three point estimates -----------------------------------------
+  // Prior mean, posterior mean, and the data-only MLE. The MLE does not exist
+  // while every serve so far has gone the same way -- including at n=0, where
+  // there are no serves at all -- and the one thing this must never do is fill
+  // that gap with 0, which is the PRIOR's answer.
+  const readout = () => sec.querySelector('[data-role="estimates-readout"]')?.textContent ?? ''
+  ok(/prior/.test(readout()) && /model/.test(readout()) && /own data/.test(readout()),
+    'the live readout should carry all three estimates')
+  ok(/own data\s*none yet/.test(readout()),
+    'with no serves absorbed the data-only estimate must read as absent, not as 0')
+  ok(!/own data\s*0\.000/.test(readout()), 'an absent MLE must never be drawn as 0.000')
+  ok(/have not said\s+anything/.test(takeawayOf(sec, 'estimates-takeaway')),
+    'the n=0 copy should say the data have not spoken yet')
+
+  const readBefore = readout()
+  click(next)
+  await settle(80)
+  ok(readout() !== readBefore, 'absorbing a serve should move the live readout')
+  const oneServe = takeawayOf(sec, 'estimates-takeaway')
+  ok(/no estimate yet/.test(oneServe) || /own data alone say/.test(oneServe),
+    'after one serve the copy either quotes the MLE or says there is none yet')
+  ok(/posterior/.test(oneServe) && /mean/.test(oneServe),
+    'the mode-versus-mean caveat should ride along with the claim')
+
+  // The estimate ticks are their own layer. layerLegend repaints its own
+  // innerHTML on every toggle, so the button has to be looked up again each
+  // time -- the old node is detached and a click on it goes nowhere.
+  const estToggle = () => sec.querySelector('[data-role="legend"] button[data-layer="estimates"]')
+  ok(estToggle(), 'the legend should offer the estimate ticks as a layer')
+  const withTicks = freeSnap()
+  click(estToggle())
+  await settle(60)
+  ok(freeSnap() !== withTicks, 'hiding the estimate ticks should redraw the panel')
+  click(estToggle())
+  await settle(60)
+  ok(freeSnap() === withTicks, 'showing them again should restore the drawing exactly')
+  click(sec.querySelector('[data-role="controls"] button[data-act="prev"]'))
+  await settle(80)
+
   // Shuffle changes the path but not the destination.
   const select = sec.querySelector('[data-role="controls"] select')
   ok(select, 'the control bar should offer a player selector')
@@ -401,8 +440,9 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   ok(sec.querySelector('[data-role="free-caption"]').textContent === beforeScale,
     'switching the scale back should restore the caption')
 
-  console.log('  belief: stepping redraws, shuffle preserves the destination, ' +
-    'the prior swap and the rate readout follow the selected player')
+  console.log('  belief: stepping redraws, shuffle preserves the destination, the three point ' +
+    'estimates track the step (and an absent MLE stays absent), the prior swap and the rate ' +
+    'readout follow the selected player')
 }
 
 // --- the two-skill story ------------------------------------------------

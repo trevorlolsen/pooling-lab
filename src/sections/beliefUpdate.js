@@ -3,7 +3,7 @@ import { renderWhenNear, trackSteps } from '../lib/scroll.js'
 import { layerLegend } from '../lib/layers.js'
 import {
   thetaGrid, logNormalPrior, accumulate, normalize, summarize,
-  predictedRate, updateSequence, mulberry32
+  predictedRate, updateSequence, mulberry32, frameBounds, mleSequence
 } from '../lib/bayesGrid.js'
 import { beliefUpdate } from '../charts/beliefUpdate.js'
 import { beliefTrace } from '../charts/beliefTrace.js'
@@ -122,7 +122,10 @@ export function beliefUpdateSection () {
       <h3 class="subhead">Take the controls</h3>
       <p>Pick any player and walk their serves yourself. The orange curve is the
          belief after the serves absorbed so far; the grey dashed curve behind it
-         is the belief one serve ago — the thing being multiplied. Shuffling the
+         is the belief one serve ago — the thing being multiplied. The three
+         ticks on the axis are three answers to the same question: grey is what
+         the prior alone said (0), orange is the model's estimate now, and
+         purple is what this player's own data say on their own. Shuffling the
          order changes the path completely and leaves the destination exactly
          where it was.</p>
       <div class="controls" data-role="controls">
@@ -137,12 +140,14 @@ export function beliefUpdateSection () {
         <button type="button" data-act="shuffle">Shuffle the order</button>
         <button type="button" data-act="reset">Reset</button>
         <span class="control-note" data-role="shuffle-note"></span>
+        <span class="control-note" data-role="estimates-readout"></span>
       </div>
       <figure class="chart-panel">
         <div data-role="legend"></div>
         <div data-role="free-chart"></div>
         <figcaption data-role="free-caption"></figcaption>
       </figure>
+      <p class="takeaway" data-role="estimates-takeaway"></p>
       <figure class="chart-panel">
         <div data-role="trace"></div>
         <figcaption data-role="trace-caption">The running success rate against what the model predicts for the serves actually faced.</figcaption>
@@ -190,6 +195,9 @@ export function beliefUpdateSection () {
   let scenarioKey = null
   let completeDensity = null
   let learnedDensity = null
+  let bounds = null         // one fixed ruler for the guided panel
+  let freeBounds = null     // ditto for free play, with the learned curve in it
+  let defaultId = null      // cached: the rule costs 10 players' worth of passes
   let population = null     // { mu, tau } from the hierarchical fit
   let teamStats = null      // the prior swap scored across the whole team
   let partialRevealed = false  // the 2x2's third row, filled in on arrival
@@ -197,12 +205,39 @@ export function beliefUpdateSection () {
   const scenario = () => state.scenario
   const indexOfPlayer = (id) => scenario().truth.child_id.indexOf(id)
 
-  /** The last, best-observed player: the walk-through wants thirty serves. */
+  /**
+   * The walk-through player.
+   *
+   * It wants the fullest data -- thirty serves -- but "the last player with the
+   * most serves" is not enough any more, because the panel now also draws the
+   * MLE, and the MLE does not exist while every serve so far has gone the same
+   * way. On one_population__20260914 the old rule picked player 40, whose first
+   * miss is serve 16: the comparison would read "no estimate yet" for half the
+   * walk-through. So: among the best-observed players, take the one whose MLE
+   * starts existing earliest, and break ties on the largest final |MLE| so the
+   * three ticks are visibly apart rather than stacked on 0.
+   */
   function defaultPlayer () {
-    const { child_id: ids, n_train: ns } = scenario().truth
-    let best = 0
-    for (let i = 0; i < ids.length; i++) if (ns[i] >= ns[best]) best = i
-    return ids[best]
+    const sc = scenario()
+    const { child_id: ids, n_train: ns } = sc.truth
+    const maxN = Math.max(...ns)
+    let best = null
+    for (let i = 0; i < ids.length; i++) {
+      if (ns[i] !== maxN) continue
+      const seq = mleSequence({
+        grid: GRID, observations: sc.observations, rows: rowsForPlayer(sc.observations, ids[i])
+      })
+      const at = seq.findIndex((s) => s.mleDefined)
+      const final = seq[seq.length - 1].mle
+      const cand = {
+        id: ids[i],
+        first: at < 0 ? Infinity : at,
+        size: final == null ? 0 : Math.abs(final)
+      }
+      if (!best || cand.first < best.first ||
+        (cand.first === best.first && cand.size > best.size)) best = cand
+    }
+    return best ? best.id : ids[ids.length - 1]
   }
 
   /** Whichever player the rest of the site is following, if this team has them. */
@@ -211,7 +246,8 @@ export function beliefUpdateSection () {
     if (state.selectedPlayer != null && ids.includes(state.selectedPlayer)) {
       return state.selectedPlayer
     }
-    return defaultPlayer()
+    if (defaultId == null) defaultId = defaultPlayer()
+    return defaultId
   }
 
   /** Everything that depends on the scenario but not on the player. */
@@ -220,6 +256,7 @@ export function beliefUpdateSection () {
     const key = sc.scenario_id ?? `${state.population}__${state.seed}`
     if (scenarioKey === key && completeDensity) return
     scenarioKey = key
+    defaultId = null
     const all = [...Array(sc.observations.y.length).keys()]
     completeDensity = densityFor(sc.observations, all, 0, 2)
     const pop = sc.arms?.none?.population
@@ -300,6 +337,11 @@ export function beliefUpdateSection () {
     learnedDensity = population
       ? densityFor(sc.observations, rows, population.mu, population.tau)
       : null
+    // One ruler per player, held fixed for every step. This is the figure: the
+    // curve narrows against axes that do not move. Both panels get their own,
+    // because only the free-play one draws the learned-prior curve.
+    bounds = frameBounds(frames, GRID)
+    freeBounds = frameBounds(frames, GRID, { extras: [learnedDensity] })
     freeStep = Math.min(freeStep, frames.length - 1)
     playerSelect.value = String(id)
     slider.max = String(frames.length - 1)
@@ -418,7 +460,7 @@ export function beliefUpdateSection () {
       frames,
       step: at,
       truth: scenario().truth.theta_true[k],
-      domain: state.index?.domains?.theta ?? [-4, 3.7],
+      bounds,
       width: chartBox.clientWidth || 760,
       // Pinned: the panel, the 90px likelihood strip and the caption all have to
       // fit between the rail and the bottom of the window. Rebuilt on resize.
@@ -432,6 +474,8 @@ export function beliefUpdateSection () {
       'threads behind them are every belief this player has already been given. ' +
       'The strip below is the current serve\'s likelihood, scaled to a maximum of 1 — its height ' +
       'means nothing, only its shape does. ' +
+      'Both axes are fixed for this player across every step, so the narrowing you see is real ' +
+      'and not the ruler shrinking with the curve. ' +
       scaleLine(frames[at].density)
 
     el.querySelector('[data-role="lede"]').innerHTML =
@@ -495,12 +539,15 @@ export function beliefUpdateSection () {
   function renderFreeChart () {
     if (!legend) {
       legend = layerLegend([
-        // Six entries, so the labels stay short enough to sit on one or two
-        // rows. What each curve MEANS is the figcaption's job -- a legend that
+        // Seven entries, so the labels stay short enough to sit on two rows.
+        // What each curve MEANS is the figcaption's job -- a legend that
         // explains itself in full sentences crowds the panel it belongs to.
+        // 'Point estimates' is one toggle over all three ticks: they answer the
+        // same question three ways and are only readable against each other.
         { id: 'posterior', label: 'Belief now', marker: 'area', color: '#e69f00' },
         { id: 'prior', label: 'Belief one serve ago', marker: 'dashed', color: '#94a3b8' },
         { id: 'ghosts', label: 'Every belief so far', marker: 'line', color: '#e69f00' },
+        { id: 'estimates', label: 'Point estimates', marker: 'rule', color: '#6a3d9a' },
         { id: 'complete', label: 'Complete pooling', marker: 'line', color: '#000000' },
         { id: 'learned', label: 'Prior learned from the team', marker: 'line', color: '#56b4e9' },
         { id: 'truth', label: 'True ability', marker: 'rule', color: '#009e73' }
@@ -516,11 +563,13 @@ export function beliefUpdateSection () {
       step: freeStep,
       layers: legend.get(),
       truth: scenario().truth.theta_true[k],
-      domain: state.index?.domains?.theta ?? [-4, 3.7],
+      bounds: freeBounds,
       extras: { complete: completeDensity, learned: learnedDensity },
       width: freeBox.clientWidth || 760,
       height: 320
     }))
+
+    renderEstimates(frame)
 
     slider.max = String(frames.length - 1)
     slider.value = String(freeStep)
@@ -536,8 +585,93 @@ export function beliefUpdateSection () {
       `The black curve is <b>complete pooling</b> — the identical updating run over all ` +
       `${nObs} serves in this scenario, which is why it does not move when you change player. ` +
       `The blue curve is this player's own serves again, started from a prior learned from the team. ` +
+      `The ticks on the axis are the prior's answer (grey, always 0), the model's (orange) and ` +
+      `this player's own data on their own (purple, the maximum-likelihood estimate — absent, and ` +
+      `drawn as an arrow off the edge, while every serve so far has gone the same way). ` +
+      `Both axes are fixed for this player across every step. ` +
       `Change the player and watch which curves jump and which one does not. ` +
       scaleLine(frame.density)
+  }
+
+  /**
+   * Three answers to one question, at the step the reader is standing on.
+   *
+   * The third one is the MLE: the theta that maximises this player's own
+   * likelihood with no prior term. It is NOT logit(makes / n) -- the serves
+   * have different difficulties, so the sample rate is an answer to a different
+   * question and would put the tick in the wrong place.
+   *
+   * It is also allowed not to exist. Every serve going the same way leaves a
+   * likelihood that only ever rises, so the maximum is off at infinity and
+   * there is no frequentist estimate at all -- which happens in the first few
+   * serves of nearly every player and never resolves for about one player in
+   * twenty. That is the most interesting state this readout has, so it says so
+   * in words rather than falling back to 0.
+   */
+  function renderEstimates (frame) {
+    const box = el.querySelector('[data-role="estimates-takeaway"]')
+    const line = controls.querySelector('[data-role="estimates-readout"]')
+    const model = frame.summary.mean
+    const allMakes = frame.n > 0 && frame.makes === frame.n
+    const serves = (n) => `${n} ${n === 1 ? 'serve' : 'serves'}`
+
+    line.innerHTML = `prior <span class="figures">0.000</span> · model ` +
+      `<span class="figures">${model.toFixed(3)}</span> · own data ` +
+      (frame.mleDefined
+        ? `<span class="figures">${frame.mle.toFixed(3)}</span>`
+        : '<span class="figures">none yet</span>')
+
+    // The guarantee is about the MODE, and the site quotes means everywhere.
+    // Measured across all 25 scenarios and 1,000 players (scripts/smoke.mjs):
+    // the mode is never outside 0 and the MLE, the mean is inside for 90.1% of
+    // the 946 players whose MLE exists at all, and the worst excursion is 0.06.
+    // So the prose describes where the estimate lands and the aside owns the
+    // exception rather than claiming an ordering that is not always true.
+    const caveat = `<span class="aside">Strictly, it is the posterior
+      <em>mode</em> that is pinned between the two — a log-concave prior times a
+      log-concave likelihood cannot peak outside them. The number quoted here,
+      and everywhere else on this site, is the posterior <em>mean</em>, and when
+      the belief is skewed a mean can sit a hair outside the pair: about one
+      player in ten across the shipped scenarios, and by under 0.07 on θ even at
+      its worst.</span>`
+
+    if (frame.n === 0) {
+      box.innerHTML = `No serves yet. The prior alone puts this player at
+        <strong class="figures">0.000</strong>, and their own data have not said
+        anything at all — there is nothing yet for a data-only estimate to be
+        computed from. Step forward and watch what the serves do to the other
+        two.`
+      return
+    }
+
+    if (!frame.mleDefined) {
+      const same = allMakes ? 'a make' : 'a miss'
+      const plural = allMakes ? 'makes' : 'misses'
+      const dir = allMakes ? 'better' : 'worse'
+      box.innerHTML = `After ${fmt(frame.n, 0)} ${frame.n === 1 ? 'serve' : 'serves'},
+        every one of them ${same}, this player's own data have
+        <strong>no estimate yet</strong>. The likelihood has no peak:
+        ${plural} only ever get more likely the ${dir} you suppose the player
+        to be, and nothing in the data says where to stop, so the maximum runs
+        off the end of the axis — which is what the purple arrow at the edge of
+        the panel means. The model has an estimate anyway, ${fmt(model)},
+        because the prior supplies the information the data have not. That is
+        the trade, in one picture: the frequentist estimate does not exist here
+        and the Bayesian one is merely uncertain. ${caveat}`
+      return
+    }
+
+    const between = (model > 0 && model < frame.mle) || (model < 0 && model > frame.mle)
+    box.innerHTML = `After ${serves(frame.n)}: the prior alone said
+      <strong class="figures">0.000</strong>, this player's own data alone say
+      ${fmt(frame.mle)}, and the model says ${fmt(model)}. ${between
+        ? '<strong>The model\'s estimate lands between the two.</strong>'
+        : '<strong>The model\'s estimate sits a hair outside the pair here</strong> — ' +
+          'which a posterior mean is allowed to do when the belief is skewed.'}
+      It is not a compromise anyone chose: it is what multiplying a prior by a
+      likelihood does. Keep stepping and it pulls away from 0 toward the
+      data-only answer; how close it gets is exactly how far the serves
+      outweigh the prior. ${caveat}`
   }
 
   /** The step-independent half: everything that only moves with the frames. */

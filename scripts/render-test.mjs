@@ -33,7 +33,7 @@ const { playerRows } = await import('../src/charts/playerRows.js')
 // but it rides along here so the belief block reads as one unit.
 const { beliefUpdate } = await import('../src/charts/beliefUpdate.js')
 const { beliefTrace } = await import('../src/charts/beliefTrace.js')
-const { thetaGrid, updateSequence } = await import('../src/lib/bayesGrid.js')
+const { thetaGrid, updateSequence, frameBounds } = await import('../src/lib/bayesGrid.js')
 
 const D = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data')
 const read = (p) => JSON.parse(readFileSync(join(D, p), 'utf8'))
@@ -296,9 +296,11 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
   const g = thetaGrid()
   const rows = rowsForPlayer(sc.observations, 31) // the 30-serve walk-through player
   const frames = updateSequence({ grid: g, prior: { mean: 0, sd: 2 }, observations: sc.observations, rows })
+  const bounds = frameBounds(frames, g)
+  const draw = (opts) => beliefUpdate({ frames, bounds, width: 700, ...opts })
 
   for (const step of [0, 1, 5, 29, 30]) {
-    const fig = beliefUpdate({ frames, step, domain: index.domains.theta, width: 700 })
+    const fig = draw({ step })
     const svgs = fig.querySelectorAll('svg')
     ok(svgs.length === 2, `belief step ${step}: belief panel + likelihood strip (got ${svgs.length})`)
     ok(count(svgs[0], 'path') > 0, `belief step ${step}: the posterior curve should be drawn`)
@@ -308,30 +310,60 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
   }
 
   // Every step must look different from the one before it.
-  const html = [0, 1, 5, 29].map((s) =>
-    beliefUpdate({ frames, step: s, domain: index.domains.theta, width: 700 }).outerHTML)
+  const html = [0, 1, 5, 29].map((s) => draw({ step: s }).outerHTML)
   ok(new Set(html).size === html.length, 'each step should redraw the belief panel')
 
-  // The display domain must widen to hold a wide early posterior rather than clip it.
-  const wide = beliefUpdate({ frames, step: 1, domain: index.domains.theta, width: 700 })
-  const dom1 = wide.querySelector('svg').__domain
-  ok(dom1[0] <= frames[1].summary.mean - 3 * frames[1].summary.sd,
-    'an early wide posterior must not be clipped by the default theta domain')
+  // THE assertion for this section. The lesson is that the belief gets
+  // narrower, and a chart that rescales per step cannot show that -- the ruler
+  // shrinks with the curve and every posterior looks the same width. So: one
+  // domain and one y ceiling, byte-identical at every single step. An earlier
+  // build widened x to mean +/- 4sd per frame and relaxed it again, which is
+  // the regression this replaces; do not reintroduce a per-step rescale.
+  const at = (s) => {
+    const svg = draw({ step: s }).querySelector('svg')
+    return { domain: svg.__domain, yTop: svg.__yTop }
+  }
+  const ref = at(0)
+  for (let s = 0; s < frames.length; s++) {
+    const here = at(s)
+    ok(here.domain[0] === ref.domain[0] && here.domain[1] === ref.domain[1],
+      `belief step ${s}: the x domain must be identical at every step ` +
+      `(got [${here.domain}], expected [${ref.domain}])`)
+    ok(here.yTop === ref.yTop,
+      `belief step ${s}: the y ceiling must be identical at every step ` +
+      `(got ${here.yTop}, expected ${ref.yTop})`)
+  }
+
+  // Fixed is only correct if it is also wide enough and tall enough: the step-1
+  // posterior is the widest thing in the sequence and must not be clipped.
+  const s1 = frames[1].summary
+  ok(ref.domain[0] <= s1.mean - 3 * s1.sd && ref.domain[1] >= s1.mean + 3 * s1.sd,
+    `the fixed domain must hold the step-1 posterior (mean ${s1.mean.toFixed(2)}, sd ${s1.sd.toFixed(2)})`)
+  const tallest = Math.max(...frames.map((f) => Math.max(...f.density)))
+  ok(ref.yTop >= tallest, 'the fixed y ceiling must hold the tallest frame')
 
   // Layers suppress.
-  const bare = beliefUpdate({ frames, step: 10, domain: index.domains.theta, width: 700, layers: { ghosts: false } })
-  const full = beliefUpdate({ frames, step: 10, domain: index.domains.theta, width: 700 })
-  ok(bare.outerHTML !== full.outerHTML, 'turning off the ghost trail should change the drawing')
+  ok(draw({ step: 10, layers: { ghosts: false } }).outerHTML !== draw({ step: 10 }).outerHTML,
+    'turning off the ghost trail should change the drawing')
+  ok(draw({ step: 10, layers: { estimates: false } }).outerHTML !== draw({ step: 10 }).outerHTML,
+    'turning off the estimate ticks should change the drawing')
+
+  // The MLE tick: absent while every serve so far has gone the same way, and
+  // present once it exists. Both states must draw, and differently.
+  const firstDefined = frames.findIndex((f) => f.mleDefined)
+  ok(firstDefined > 0, 'this player should acquire an MLE at some point')
+  ok(!frames[1].mleDefined && frames[1].mleEdge != null,
+    'after one serve the likelihood is monotone, so the MLE is null with an edge')
+  ok(draw({ step: 1 }).outerHTML !== draw({ step: firstDefined }).outerHTML,
+    'the panel should differ between an off-scale MLE and a drawn one')
 
   const trace = beliefTrace({ frames, width: 700 })
   const tsvg = trace.tagName === 'svg' ? trace : trace.querySelector('svg')
   ok(tsvg, 'belief trace should render an svg')
   ok(/rate/i.test(tsvg.textContent), 'the trace axis should be labelled as a rate')
-  const domAt = (s) => beliefUpdate({ frames, step: s, domain: index.domains.theta, width: 700 })
-    .querySelector('svg').__domain
-  console.log(`  belief update ok (${frames.length} frames, player 31), domain ` +
-    `[${domAt(1).map((v) => v.toFixed(2)).join(', ')}] at step 1 -> ` +
-    `[${domAt(30).map((v) => v.toFixed(2)).join(', ')}] at step 30`)
+  console.log(`  belief update ok (${frames.length} frames, player 31), one fixed domain ` +
+    `[${ref.domain.map((v) => v.toFixed(2)).join(', ')}] and y top ${ref.yTop.toFixed(3)} ` +
+    `at every step; MLE defined from n=${firstDefined}`)
 }
 
 // --- the per-individual convergence sweep --------------------------------

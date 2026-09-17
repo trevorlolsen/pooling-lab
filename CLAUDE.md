@@ -38,8 +38,8 @@ From the source project:
 
 ```bash
 cd site && npm run check && node scripts/interaction-test.mjs   # gate it there first
-node scripts/sync-pages.mjs                                      # -> ../../pooling-lab-pages
-cd ../../pooling-lab-pages
+node scripts/sync-pages.mjs                                      # prints the absolute target
+cd ../../../pooling-lab-pages                                    # THREE levels up from site/
 git status                       # should be only what you meant to change
 npm run check && node scripts/interaction-test.mjs
 git commit -am "..." && git push  # pushing main IS the deploy

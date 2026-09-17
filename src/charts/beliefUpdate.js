@@ -1,5 +1,5 @@
 import * as Plot from '@observablehq/plot'
-import { thetaGrid } from '../lib/bayesGrid.js'
+import { thetaGrid, frameBounds } from '../lib/bayesGrid.js'
 
 // The palette, matched to styles.css. These are hardcoded rather than read
 // from CSS custom properties because this module is imported by the headless
@@ -9,7 +9,9 @@ const COLOR = {
   prior: '#94a3b8',
   truth: '#009e73', // --truth
   complete: '#000000', // --complete
-  learned: '#56b4e9' // --partial
+  learned: '#56b4e9', // --partial
+  priorTick: '#64748b', // the prior mean, a shade darker than the prior curve
+  mle: '#6a3d9a' // their own data alone -- a dark tone used nowhere else
 }
 
 const MARGIN_LEFT = 64
@@ -50,9 +52,17 @@ const peakOf = (pts) => pts.reduce((m, p) => (p.y > m ? p.y : m), 0)
  * Both panels are given the same x domain and the same left margin, because
  * the whole reading of the figure is vertical: this likelihood, applied to
  * that prior, gives this posterior.
+ *
+ * `bounds` comes from frameBounds() over the WHOLE sequence and is the same at
+ * every step. That is the whole figure: the axes are a fixed ruler, so a wide
+ * low prior visibly becomes a narrow tall spike. Rescaling per step -- which
+ * this chart used to do -- cancels the one thing the section teaches, because
+ * the ruler shrinks with the curve. If bounds is omitted it is computed from
+ * `frames` here, which is still fixed across steps; callers pass it in so the
+ * `learned` extra can be counted in the height.
  */
 export function beliefUpdate ({
-  frames, step = 0, layers = {}, domain = [-4, 3.7], extras = {}, truth = null,
+  frames, step = 0, layers = {}, bounds = null, extras = {}, truth = null,
   grid, width = 760, height = 300, stripHeight = 90
 }) {
   const on = (id) => layers[id] !== false
@@ -61,16 +71,13 @@ export function beliefUpdate ({
   const frame = frames[at]
   const prev = frames[at - 1] ?? frames[0]
 
-  // The display domain must not clip. index.domains.theta is [-4, 3.7], while
-  // the posterior after one serve is enormous -- clipping it is exactly the
-  // class of bug that has shipped here before with every check green. Widen to
-  // hold the current frame, and let it settle back as the belief narrows.
-  const { mean, sd } = frame.summary
-  const lo = Math.max(g.from, Math.min(domain[0], mean - 4 * sd))
-  const hi = Math.min(g.to, Math.max(domain[1], mean + 4 * sd))
+  const b = bounds ?? frameBounds(frames, g, {
+    extras: extras.learned ? [extras.learned] : []
+  })
+  const [lo, hi] = b.x
+  const top = b.yTop
 
   const marks = []
-  let peak = 0
 
   // --- ghosts: every belief this player has already held -------------------
   // The sequence of shapes narrowing IS the lesson of the section.
@@ -80,7 +87,6 @@ export function beliefUpdate ({
       const pts = curvePoints(frames[k].density, g, lo, hi, 160)
       for (const p of pts) ghosts.push({ ...p, k })
     }
-    peak = Math.max(peak, peakOf(ghosts))
     marks.push(Plot.lineY(ghosts, {
       x: 'x',
       y: 'y',
@@ -95,7 +101,6 @@ export function beliefUpdate ({
   // --- prior: the curve we are about to multiply ---------------------------
   if (on('prior')) {
     const pts = curvePoints(prev.density, g, lo, hi)
-    peak = Math.max(peak, peakOf(pts))
     marks.push(Plot.lineY(pts, {
       x: 'x',
       y: 'y',
@@ -109,7 +114,6 @@ export function beliefUpdate ({
   // --- posterior: the belief after n serves --------------------------------
   if (on('posterior')) {
     const pts = curvePoints(frame.density, g, lo, hi)
-    peak = Math.max(peak, peakOf(pts))
     marks.push(
       Plot.areaY(pts, {
         x: 'x',
@@ -133,18 +137,16 @@ export function beliefUpdate ({
   // is the same machine started somewhere else. Both are passed in as
   // densities over the same grid.
   // The learned-prior belief is this player's own serves again, so it is the
-  // same order of magnitude as the posterior and belongs in the y domain.
+  // same order of magnitude as the posterior and belongs in the height: the
+  // caller hands it to frameBounds as an `extras` density.
   if (on('learned') && extras.learned) {
     const pts = curvePoints(extras.learned, g, lo, hi)
-    peak = Math.max(peak, peakOf(pts))
     marks.push(Plot.lineY(pts, {
       x: 'x', y: 'y', stroke: COLOR.learned, strokeWidth: 1.6, curve: 'basis'
     }))
   }
 
-  const top = (peak > 0 ? peak : 1) * 1.12
-
-  // Complete pooling is deliberately LEFT OUT of the y domain above. It is one
+  // Complete pooling is deliberately LEFT OUT of the height (frameBounds). It is one
   // belief built from all 650 serves, so it is several times taller than
   // anything built from one player's thirty -- and letting it set the scale
   // squashes the posterior, the prior and the whole ghost trail into a smear
@@ -173,6 +175,54 @@ export function beliefUpdate ({
         x: 'x', y: 'y', text: 't', fill: COLOR.complete,
         fontSize: 10, textAnchor: 'start', dx: 5
       }))
+    }
+  }
+
+  // --- estimates: three answers to the same question -----------------------
+  // Ticks on the theta axis, under the curve: where the prior alone said this
+  // player was (0), where the model says they are now (the posterior mean),
+  // and where their own data alone says they are (the MLE).
+  //
+  // The MLE does not always exist. While every serve so far has gone the same
+  // way the likelihood is monotone and its maximum is off at +/-infinity, so
+  // frame.mle is null and the honest drawing is an arrow at the edge pointing
+  // out of the panel -- never a tick at 0, which is the prior's answer and the
+  // opposite of what "no estimate" means. Heights differ so two estimates that
+  // land on the same theta are still two visible ticks.
+  if (on('estimates')) {
+    const tick = (x, h, color, stroke = 2) => [
+      Plot.ruleX([{ x }], {
+        x: 'x', y1: () => 0, y2: () => top * h, stroke: color, strokeWidth: stroke
+      }),
+      Plot.dot([{ x, y: top * h }], { x: 'x', y: 'y', fill: color, r: 2.6 })
+    ]
+    marks.push(...tick(0, 0.06, COLOR.priorTick, 1.6))
+    marks.push(...tick(frame.summary.mean, 0.14, COLOR.posterior))
+
+    const inRange = frame.mleDefined && frame.mle >= lo && frame.mle <= hi
+    if (inRange) {
+      marks.push(...tick(frame.mle, 0.10, COLOR.mle))
+    } else {
+      // Off the panel: either genuinely undefined (monotone likelihood) or a
+      // defined MLE further out than the fixed domain reaches. Both read the
+      // same way to the eye and both are an arrow at the nearer edge.
+      const high = frame.mleDefined ? frame.mle > hi : frame.mleEdge === 'high'
+      const low = frame.mleDefined ? frame.mle < lo : frame.mleEdge === 'low'
+      if (high || low) {
+        const x = high ? hi : lo
+        marks.push(Plot.text([{ x, y: top * 0.10 }], {
+          x: 'x',
+          y: 'y',
+          text: () => (width >= 420
+            ? (high ? 'own data alone ▶' : '◀ own data alone')
+            : (high ? '▶' : '◀')),
+          fill: COLOR.mle,
+          fontSize: 10,
+          fontWeight: 600,
+          textAnchor: high ? 'end' : 'start',
+          dx: high ? -3 : 3
+        }))
+      }
     }
   }
 
@@ -262,6 +312,7 @@ export function beliefUpdate ({
   // The resolved domain is asserted on directly: a headless check cannot see
   // that a curve ran off the edge, but it can read the number that decided it.
   beliefSvg.__domain = [lo, hi]
+  beliefSvg.__yTop = top
 
   const wrap = document.createElement('div')
   wrap.className = 'belief-update'
