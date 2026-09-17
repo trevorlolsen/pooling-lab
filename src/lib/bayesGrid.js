@@ -153,68 +153,15 @@ export function likelihoodCurve (grid, difficulty, y) {
   return out
 }
 
-/**
- * The maximum-likelihood estimate of theta from a prior-free log-likelihood.
- *
- * This is the frequentist answer to the same question the posterior answers,
- * and it is NOT logit(makes / n): the serves have different difficulties, so
- * the sample rate estimates a different quantity entirely. It is the grid
- * argmax of sum_i log p(y_i | theta, d_i), with no prior term at all.
- *
- * It does not always exist. While every serve so far has gone the same way the
- * log-likelihood is monotone in theta -- every make is more likely from a
- * better player, forever -- and the maximum is at +/-infinity. That shows up
- * here as an argmax sitting on a grid edge, and it is reported honestly as
- * `mle: null` rather than smuggled in as whichever edge the grid happens to
- * stop at. `edge` says which way it ran off, so a chart can draw an arrow.
- *
- * `flat` (an all-equal log-likelihood, i.e. no serves yet) is not monotone in
- * either direction and gets no edge.
- */
-function gridArgmax (logLik, grid) {
-  const { theta, n } = grid
-  let maxIdx = 0
-  let max = -Infinity
-  let flat = true
-  for (let i = 0; i < n; i++) {
-    if (logLik[i] > max) { max = logLik[i]; maxIdx = i }
-    if (flat && logLik[i] !== logLik[0]) flat = false
-  }
-  if (flat) return { mle: null, mleDefined: false, mleEdge: null }
-  if (maxIdx === 0) return { mle: null, mleDefined: false, mleEdge: 'low' }
-  if (maxIdx === n - 1) return { mle: null, mleDefined: false, mleEdge: 'high' }
-  return { mle: theta[maxIdx], mleDefined: true, mleEdge: null }
-}
-
-/** The MLE after each serve, without building any densities.
- *
- *  updateSequence returns the same numbers on its frames. This is the cheap
- *  path for callers that only want to know WHEN the estimate starts existing --
- *  one 1025-point pass per serve instead of a posterior, a summary and a
- *  predictive rate. */
-export function mleSequence ({ grid, observations, rows }) {
-  const logLik = new Float64Array(grid.n)
-  const out = [gridArgmax(logLik, grid)]
-  for (let k = 0; k < rows.length; k++) {
-    accumulate(logLik, grid, observations, [rows[k]])
-    out.push(gridArgmax(logLik, grid))
-  }
-  return out
-}
-
 /** Absorb `rows` one serve at a time. Returns one frame per serve, plus a
  *  prior-only frame at index 0. frames[k].density IS the prior for frames[k+1].
  *
  *  Each density is sliced before it is stored -- accumulate mutates, so without
- *  the copy every frame would alias the last one.
- *
- *  A prior-free log-likelihood rides along beside the posterior so every frame
- *  can carry the MLE -- the same serves with the prior term switched off. */
+ *  the copy every frame would alias the last one. */
 export function updateSequence ({ grid, prior, observations, rows }) {
   const mean = prior?.mean ?? 0
   const sd = prior?.sd ?? 2
   const logPost = logNormalPrior(grid, mean, sd)
-  const logLik = new Float64Array(grid.n)
   const frames = []
 
   const density0 = normalize(logPost, grid).slice()
@@ -228,8 +175,7 @@ export function updateSequence ({ grid, prior, observations, rows }) {
     summary: summarize(density0, grid),
     makes: 0,
     sampleRate: null,
-    predictedRate: null,
-    ...gridArgmax(logLik, grid)
+    predictedRate: null
   })
 
   const seen = []
@@ -239,7 +185,6 @@ export function updateSequence ({ grid, prior, observations, rows }) {
     const d = observations.difficulty[r]
     const y = observations.y[r]
     accumulate(logPost, grid, observations, [r])
-    accumulate(logLik, grid, observations, [r])
     const density = normalize(logPost, grid).slice()
     seen.push(d)
     if (y === 1) makes++
@@ -254,8 +199,7 @@ export function updateSequence ({ grid, prior, observations, rows }) {
       summary: summarize(density, grid),
       makes,
       sampleRate: makes / n,
-      predictedRate: predictedRate(density, grid, seen),
-      ...gridArgmax(logLik, grid)
+      predictedRate: predictedRate(density, grid, seen)
     })
   }
   return frames

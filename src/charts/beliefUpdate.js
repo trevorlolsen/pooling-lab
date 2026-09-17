@@ -10,8 +10,7 @@ const COLOR = {
   truth: '#009e73', // --truth
   complete: '#000000', // --complete
   learned: '#56b4e9', // --partial
-  priorTick: '#64748b', // the prior mean, a shade darker than the prior curve
-  mle: '#6a3d9a' // their own data alone -- a dark tone used nowhere else
+  priorTick: '#64748b' // the prior mean, a shade darker than the prior curve
 }
 
 const MARGIN_LEFT = 64
@@ -178,17 +177,14 @@ export function beliefUpdate ({
     }
   }
 
-  // --- estimates: three answers to the same question -----------------------
-  // Ticks on the theta axis, under the curve: where the prior alone said this
-  // player was (0), where the model says they are now (the posterior mean),
-  // and where their own data alone says they are (the MLE).
+  // --- estimates: where we started and where we stand ----------------------
+  // Two ticks on the theta axis, under the curve: where the prior alone said
+  // this player was (0, grey) and where the model says they are now (the
+  // posterior mean, orange). The distance between them is everything the
+  // serves have bought so far.
   //
-  // The MLE does not always exist. While every serve so far has gone the same
-  // way the likelihood is monotone and its maximum is off at +/-infinity, so
-  // frame.mle is null and the honest drawing is an arrow at the edge pointing
-  // out of the panel -- never a tick at 0, which is the prior's answer and the
-  // opposite of what "no estimate" means. Heights differ so two estimates that
-  // land on the same theta are still two visible ticks.
+  // Heights differ so that a posterior mean still sitting on 0 is two visible
+  // ticks rather than one.
   if (on('estimates')) {
     const tick = (x, h, color, stroke = 2) => [
       Plot.ruleX([{ x }], {
@@ -198,32 +194,6 @@ export function beliefUpdate ({
     ]
     marks.push(...tick(0, 0.06, COLOR.priorTick, 1.6))
     marks.push(...tick(frame.summary.mean, 0.14, COLOR.posterior))
-
-    const inRange = frame.mleDefined && frame.mle >= lo && frame.mle <= hi
-    if (inRange) {
-      marks.push(...tick(frame.mle, 0.10, COLOR.mle))
-    } else {
-      // Off the panel: either genuinely undefined (monotone likelihood) or a
-      // defined MLE further out than the fixed domain reaches. Both read the
-      // same way to the eye and both are an arrow at the nearer edge.
-      const high = frame.mleDefined ? frame.mle > hi : frame.mleEdge === 'high'
-      const low = frame.mleDefined ? frame.mle < lo : frame.mleEdge === 'low'
-      if (high || low) {
-        const x = high ? hi : lo
-        marks.push(Plot.text([{ x, y: top * 0.10 }], {
-          x: 'x',
-          y: 'y',
-          text: () => (width >= 420
-            ? (high ? 'own data alone ▶' : '◀ own data alone')
-            : (high ? '▶' : '◀')),
-          fill: COLOR.mle,
-          fontSize: 10,
-          fontWeight: 600,
-          textAnchor: high ? 'end' : 'start',
-          dx: high ? -3 : 3
-        }))
-      }
-    }
   }
 
   if (on('truth') && Number.isFinite(truth)) {

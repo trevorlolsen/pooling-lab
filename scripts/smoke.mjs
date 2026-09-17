@@ -14,7 +14,7 @@ import {
 } from '../src/lib/transforms.js'
 import {
   thetaGrid, logNormalPrior, accumulate, normalize, summarize, predictedRate, updateSequence,
-  mulberry32, frameBounds, mleSequence
+  mulberry32, frameBounds
 } from '../src/lib/bayesGrid.js'
 
 const D = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data')
@@ -224,94 +224,6 @@ console.log('borrowing targets: none=%d distinct, correct=%d distinct',
   const tall = frames[frames.length - 1].density.map((v) => v * 3)
   ok(frameBounds(frames, g, { extras: [tall] }).yTop > fb.yTop,
     'an extra density must be able to raise the y ceiling')
-
-  // --- the MLE exists exactly when the outcomes are not all the same -----
-  const seq = mleSequence({ grid: g, observations: o, rows })
-  ok(seq.length === frames.length, 'mleSequence must give one entry per frame, plus n=0')
-  let makes = 0
-  for (let k = 0; k < seq.length; k++) {
-    if (k > 0 && o.y[rows[k - 1]] === 1) makes++
-    const separated = k === 0 || makes === k || makes === 0
-    ok(seq[k].mleDefined === !separated,
-      `n=${k}: the MLE exists iff the outcomes so far differ (${makes} makes of ${k})`)
-    ok(seq[k].mleDefined || seq[k].mle === null, `n=${k}: an undefined MLE must be null, never 0`)
-    if (!seq[k].mleDefined && k > 0) {
-      ok(seq[k].mleEdge === (makes === k ? 'high' : 'low'),
-        `n=${k}: a monotone likelihood must say which way it ran off`)
-    }
-    ok(frames[k].mle === seq[k].mle && frames[k].mleDefined === seq[k].mleDefined,
-      `n=${k}: updateSequence and mleSequence must agree about the MLE`)
-  }
-  ok(seq[0].mleEdge === null, 'with no serves the likelihood is flat, so there is no edge either')
-}
-
-// --- where the Bayesian estimate lands, against the data-only one --------
-// The section claims the model's estimate sits between the prior mean (0) and
-// the estimate from this player's data alone. Log-concavity guarantees that for
-// the posterior MODE. The site quotes MEANS everywhere, and a mean can fall
-// just outside when the posterior is skewed -- so the prose says "lands
-// between" and an aside owns the exception. These two rates are what that copy
-// is allowed to claim, measured over every player in every shipped scenario.
-//
-// "Between" is tested inclusively for the mode, and that is not a fudge: on a
-// 1025-point grid the cell is 0.0156 wide, and when the MLE is small (|MLE| <
-// 0.15, 71 players here) the mode and the MLE land in the SAME cell. Every one
-// of those is a tie at the endpoint -- zero players have a mode strictly
-// outside the pair, which is the guarantee log-concavity actually makes.
-{
-  const g = thetaGrid()
-  let defined = 0
-  let undef = 0
-  let modeOutside = 0
-  let modeStrict = 0
-  let modeExample = null
-  let meanBetween = 0
-  let worstOutside = 0
-  for (const p of index.populations) {
-    for (const id of p.scenario_ids) {
-      const s = read(`scenarios/${id}.json`)
-      const o = s.observations
-      const rowsFor = new Map()
-      for (let i = 0; i < o.child_id.length; i++) {
-        if (!rowsFor.has(o.child_id[i])) rowsFor.set(o.child_id[i], [])
-        rowsFor.get(o.child_id[i]).push(i)
-      }
-      for (const rows of rowsFor.values()) {
-        const seq = mleSequence({ grid: g, observations: o, rows })
-        const mle = seq[seq.length - 1].mle
-        if (mle == null) { undef++; continue }
-        defined++
-        const density = normalize(accumulate(logNormalPrior(g, 0, 2), g, o, rows), g)
-        let mode = 0
-        let best = -Infinity
-        for (let i = 0; i < g.n; i++) if (density[i] > best) { best = density[i]; mode = g.theta[i] }
-        const mean = summarize(density, g).mean
-        const lo = Math.min(0, mle)
-        const hi = Math.max(0, mle)
-        const strict = (v) => v > lo && v < hi
-        if (!(mode >= lo && mode <= hi)) {
-          modeOutside++
-          if (!modeExample) modeExample = `MLE ${mle.toFixed(3)}, mode ${mode.toFixed(3)}`
-        }
-        if (strict(mode)) modeStrict++
-        if (strict(mean)) meanBetween++
-        else worstOutside = Math.max(worstOutside, Math.min(Math.abs(mean), Math.abs(mean - mle)))
-      }
-    }
-  }
-  const meanRate = meanBetween / defined
-  ok(modeOutside === 0,
-    `the posterior mode must NEVER sit outside 0 and the MLE ` +
-    `(${modeOutside}/${defined} do, e.g. ${modeExample})`)
-  ok(meanRate > 0.85,
-    `the posterior mean sits between for a large majority (${(100 * meanRate).toFixed(1)}%)`)
-  ok(worstOutside < 0.1,
-    `when the mean falls outside it is by a hair (worst ${worstOutside.toFixed(3)})`)
-  console.log('bayes grid: %d players with a defined MLE (%d separated, %s%%) — ' +
-    'mode never outside [0, MLE] (%s%% strictly inside, the rest tied at a grid cell), ' +
-    'mean strictly inside %s%% (worst miss %s)',
-  defined, undef, (100 * undef / (defined + undef)).toFixed(1),
-  (100 * modeStrict / defined).toFixed(1), (100 * meanRate).toFixed(1), worstOutside.toFixed(3))
 }
 
 // --- every scenario matches what index.json advertises -------------------

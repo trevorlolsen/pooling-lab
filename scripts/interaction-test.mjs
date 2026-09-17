@@ -348,29 +348,27 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   await settle(80)
   ok(freeSnap() === before, 'stepping back should restore the previous drawing exactly')
 
-  // --- the three point estimates -----------------------------------------
-  // Prior mean, posterior mean, and the data-only MLE. The MLE does not exist
-  // while every serve so far has gone the same way -- including at n=0, where
-  // there are no serves at all -- and the one thing this must never do is fill
-  // that gap with 0, which is the PRIOR's answer.
+  // --- the two point estimates -------------------------------------------
+  // The prior's answer and the posterior mean now, and nothing else: the
+  // evidence between them is not summarised into a number at all, it is the
+  // likelihood strip under the panel, which the copy has to send the reader to.
   const readout = () => sec.querySelector('[data-role="estimates-readout"]')?.textContent ?? ''
-  ok(/prior/.test(readout()) && /model/.test(readout()) && /own data/.test(readout()),
-    'the live readout should carry all three estimates')
-  ok(/own data\s*none yet/.test(readout()),
-    'with no serves absorbed the data-only estimate must read as absent, not as 0')
-  ok(!/own data\s*0\.000/.test(readout()), 'an absent MLE must never be drawn as 0.000')
-  ok(/have not said\s+anything/.test(takeawayOf(sec, 'estimates-takeaway')),
-    'the n=0 copy should say the data have not spoken yet')
+  ok(/prior/.test(readout()) && /model/.test(readout()),
+    'the live readout should carry both estimates')
+  ok(!/own data/.test(readout()),
+    'the data-only estimate is gone and must not come back in the readout')
+  ok(/strip under the panel is\s+empty/.test(takeawayOf(sec, 'estimates-takeaway')),
+    'the n=0 copy should say there is nothing to multiply by yet')
 
   const readBefore = readout()
   click(next)
   await settle(80)
   ok(readout() !== readBefore, 'absorbing a serve should move the live readout')
   const oneServe = takeawayOf(sec, 'estimates-takeaway')
-  ok(/no estimate yet/.test(oneServe) || /own data alone say/.test(oneServe),
-    'after one serve the copy either quotes the MLE or says there is none yet')
-  ok(/posterior/.test(oneServe) && /mean/.test(oneServe),
-    'the mode-versus-mean caveat should ride along with the claim')
+  ok(/the model says/.test(oneServe),
+    'after one serve the copy should quote where the model now stands')
+  ok(/strip below/.test(oneServe) && /(made|missed) at d =/.test(oneServe),
+    'the copy should send the reader to the likelihood strip for the serve just absorbed')
 
   // The estimate ticks are their own layer. layerLegend repaints its own
   // innerHTML on every toggle, so the button has to be looked up again each
@@ -440,8 +438,8 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   ok(sec.querySelector('[data-role="free-caption"]').textContent === beforeScale,
     'switching the scale back should restore the caption')
 
-  console.log('  belief: stepping redraws, shuffle preserves the destination, the three point ' +
-    'estimates track the step (and an absent MLE stays absent), the prior swap and the rate ' +
+  console.log('  belief: stepping redraws, shuffle preserves the destination, the two point ' +
+    'estimates track the step, the prior swap and the rate ' +
     'readout follow the selected player')
 }
 

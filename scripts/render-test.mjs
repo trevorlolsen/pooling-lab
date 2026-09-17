@@ -348,14 +348,14 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
   ok(draw({ step: 10, layers: { estimates: false } }).outerHTML !== draw({ step: 10 }).outerHTML,
     'turning off the estimate ticks should change the drawing')
 
-  // The MLE tick: absent while every serve so far has gone the same way, and
-  // present once it exists. Both states must draw, and differently.
-  const firstDefined = frames.findIndex((f) => f.mleDefined)
-  ok(firstDefined > 0, 'this player should acquire an MLE at some point')
-  ok(!frames[1].mleDefined && frames[1].mleEdge != null,
-    'after one serve the likelihood is monotone, so the MLE is null with an edge')
-  ok(draw({ step: 1 }).outerHTML !== draw({ step: firstDefined }).outerHTML,
-    'the panel should differ between an off-scale MLE and a drawn one')
+  // Exactly two ticks, at every step: the prior mean and the posterior mean.
+  // Each is a rule plus a dot, so the ticks are countable as the dots the
+  // estimates layer adds and takes away.
+  const dots = (opts) => count(draw(opts).querySelector('svg'), 'circle')
+  for (const step of [0, 1, 5, 30]) {
+    ok(dots({ step }) - dots({ step, layers: { estimates: false } }) === 2,
+      `belief step ${step}: the estimates layer must draw exactly two ticks`)
+  }
 
   const trace = beliefTrace({ frames, width: 700 })
   const tsvg = trace.tagName === 'svg' ? trace : trace.querySelector('svg')
@@ -363,7 +363,7 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
   ok(/rate/i.test(tsvg.textContent), 'the trace axis should be labelled as a rate')
   console.log(`  belief update ok (${frames.length} frames, player 31), one fixed domain ` +
     `[${ref.domain.map((v) => v.toFixed(2)).join(', ')}] and y top ${ref.yTop.toFixed(3)} ` +
-    `at every step; MLE defined from n=${firstDefined}`)
+    'at every step; two estimate ticks at every step')
 }
 
 // --- the per-individual convergence sweep --------------------------------
