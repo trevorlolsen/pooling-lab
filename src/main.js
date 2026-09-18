@@ -85,17 +85,56 @@ function showRuntimeError (label, err) {
 window.addEventListener('error', (e) => showRuntimeError('error', e.error ?? e.message))
 window.addEventListener('unhandledrejection', (e) => showRuntimeError('promise', e.reason))
 
+// Read aloud at the start of the session, so it is written the way it is said:
+// first person, four numbered points, before any of the statistics.
+function openingPoints () {
+  return `
+    <p class="eyebrow">Four things I want to say at the beginning</p>
+    <ol class="intro-points">
+      <li>
+        <p class="point-lede">I “vibe coded” this site with various LLMs.</p>
+        <p>So, appropriately, treat anything you read on the site with a healthy
+           degree of skepticism.</p>
+      </li>
+      <li>
+        <p class="point-lede">This is meant to be interactive.</p>
+        <p>There is so much we could discuss, so please jump in with questions or
+           comments. Take something like synthetic data — there’s a whole
+           conversation just around how to generate it, when it’s appropriate,
+           and how to justify it.</p>
+      </li>
+      <li>
+        <p class="point-lede">I’m going to lean heavily on the geometric view.</p>
+        <p>I think of it a little like linear algebra: there’s an algebraic view
+           and a geometric view. Both describe the same thing, but a lot of the
+           intuition comes from being able to see the geometry.</p>
+      </li>
+      <li>
+        <p class="point-lede">The goal for the conversation is to see how covariates work.</p>
+        <p>To get the geometric intuition on what covariates do, we are going to
+           spend a lot of time on how information is pooled in this context. I
+           also hope it becomes clear that Bayesian statistics is useful for
+           small samples.</p>
+      </li>
+    </ol>`
+}
+
 function hero () {
   const el = document.createElement('div')
   el.className = 'wrap hero'
   el.innerHTML = `
-    <h1>You watched one player serve five times. Another, thirty. How good is each one?</h1>
-    <p>Forty players. Some you have barely seen. A model has to decide, for each
-       one, how much to trust what it watched and how much to borrow from
-       everyone else.</p>
-    <p>That decision has a right answer, and it changes from player to player.
-       Scroll to watch it happen — and use the controls above to change the
-       population the players were drawn from.</p>`
+    <h1>The geometric view on covariates</h1>
+    ${openingPoints()}
+    <div class="hero-setup">
+      <p>So, the setting: you watched one player serve five times. Another,
+         thirty. How good is each one?</p>
+      <p>Forty players. Some you have barely seen. A model has to decide, for
+         each one, how much to trust what it watched and how much to borrow from
+         everyone else.</p>
+      <p>That decision has a right answer, and it changes from player to player.
+         Scroll to watch it happen — and use the controls above to change the
+         population the players were drawn from.</p>
+    </div>`
   return el
 }
 

@@ -94,6 +94,46 @@ button[aria-pressed='true'] { background: var(--ink); color: #fff; border-color:
 }
 .hero p { font-size: 1.15rem; color: var(--ink-soft); margin: 0 0 1rem; }
 
+/* The four opening points. Numbered in CSS rather than by the list marker so
+   the counter can sit in a fixed gutter and the two lines of each point stay
+   flush with each other. */
+.hero .eyebrow { margin: 2.25rem 0 1rem; font-size: 11px; }
+.intro-points {
+  list-style: none;
+  counter-reset: intro;
+  margin: 0 0 2.5rem;
+  padding: 0 0 2.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+.intro-points > li {
+  counter-increment: intro;
+  position: relative;
+  padding-left: 2.5rem;
+}
+.intro-points > li + li { margin-top: 1.35rem; }
+.intro-points > li::before {
+  content: counter(intro);
+  position: absolute;
+  left: 0;
+  top: 0.1em;
+  width: 1.7rem;
+  height: 1.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-soft);
+  font: 600 12px/1 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+.hero .intro-points p { font-size: 1.02rem; margin: 0; }
+.hero .intro-points .point-lede {
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 0.25rem;
+}
+
 section { padding: 3.5rem 0; border-top: 1px solid var(--rule); }
 section > .wrap > header { max-width: var(--measure); margin-bottom: 1.75rem; }
 
