@@ -36,6 +36,26 @@ function curvePoints (density, grid, lo, hi, target = 240) {
   return pts
 }
 
+/**
+ * Which of the frames before `at` to draw as ghosts, at most `max` of them.
+ *
+ * Log-spaced rather than evenly spaced: the belief moves furthest over the first
+ * handful of serves and barely at all over the last hundred, so even spacing
+ * spends most of its budget redrawing curves that lie on top of each other.
+ *
+ * Returns every step when the budget is not binding, so the default of Infinity
+ * reproduces the old behaviour exactly -- including the array's order, which
+ * Plot turns into <path> order.
+ */
+function ghostSteps (at, max) {
+  if (!(max < at)) return Array.from({ length: at }, (_, k) => k)
+  const keep = new Set([0, at - 1])
+  for (let j = 0; j < max; j++) {
+    keep.add(Math.round(Math.expm1((j / (max - 1)) * Math.log1p(at - 1))))
+  }
+  return [...keep].filter((k) => k >= 0 && k < at).sort((a, b) => a - b)
+}
+
 const peakOf = (pts) => pts.reduce((m, p) => (p.y > m ? p.y : m), 0)
 
 /**
@@ -62,7 +82,7 @@ const peakOf = (pts) => pts.reduce((m, p) => (p.y > m ? p.y : m), 0)
  */
 export function beliefUpdate ({
   frames, step = 0, layers = {}, bounds = null, extras = {}, truth = null,
-  grid, width = 760, height = 300, stripHeight = 90
+  grid, width = 760, height = 300, stripHeight = 90, maxGhosts = Infinity
 }) {
   const on = (id) => layers[id] !== false
   const g = grid ?? thetaGrid({ n: frames[0].density.length })
@@ -80,9 +100,17 @@ export function beliefUpdate ({
 
   // --- ghosts: every belief this player has already held -------------------
   // The sequence of shapes narrowing IS the lesson of the section.
+  //
+  // One <path> per ghost, rebuilt on every step. Over a 30-serve player that is
+  // 30 paths and nobody notices; over all 650 serves in a scenario it measured
+  // 661 paths and 4 MB of SVG, rebuilt on every scroll beat. maxGhosts thins
+  // them log-spaced -- dense early where the shape is changing fast, sparse
+  // later where consecutive curves sit on top of each other anyway -- and the
+  // most recent ghost is always kept, since it is the one the eye tracks.
+  // Default Infinity: a 30-serve panel renders byte-identically to before.
   if (on('ghosts') && at > 0) {
     const ghosts = []
-    for (let k = 0; k < at; k++) {
+    for (const k of ghostSteps(at, maxGhosts)) {
       const pts = curvePoints(frames[k].density, g, lo, hi, 160)
       for (const p of pts) ghosts.push({ ...p, k })
     }

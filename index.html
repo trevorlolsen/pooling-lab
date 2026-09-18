@@ -33,7 +33,9 @@
     </div>
     <div class="rail-control">
       <label>Scale</label>
-      <span class="seg" id="scale" title="Sections 2, 3, 6, 7 and 8 follow this; section 4 is always on the ability scale and section 5 is fixed at d* = 0">
+      <!-- The title is written by main.js from lib/sectionOrder.js: it names
+           sections by number, and the numbers are not this file's to know. -->
+      <span class="seg" id="scale">
         <button data-scale="probability" aria-pressed="false">Probability</button>
         <button data-scale="theta" aria-pressed="true">Ability θ</button>
       </span>

@@ -33,7 +33,8 @@ const { playerRows } = await import('../src/charts/playerRows.js')
 // but it rides along here so the belief block reads as one unit.
 const { beliefUpdate } = await import('../src/charts/beliefUpdate.js')
 const { beliefTrace } = await import('../src/charts/beliefTrace.js')
-const { thetaGrid, updateSequence, frameBounds } = await import('../src/lib/bayesGrid.js')
+const { thetaGrid, updateSequence, frameBounds, rowsForPlayer } =
+  await import('../src/lib/bayesGrid.js')
 
 const D = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data')
 const read = (p) => JSON.parse(readFileSync(join(D, p), 'utf8'))
@@ -288,11 +289,6 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
 // interaction harness only ever reaches step 0 -- step coverage lives here.
 {
   const sc = read('scenarios/one_population__20260914.json')
-  const rowsForPlayer = (o, child) => {
-    const rows = []
-    for (let i = 0; i < o.child_id.length; i++) if (o.child_id[i] === child) rows.push(i)
-    return rows
-  }
   const g = thetaGrid()
   const rows = rowsForPlayer(sc.observations, 31) // the 30-serve walk-through player
   const frames = updateSequence({ grid: g, prior: { mean: 0, sd: 2 }, observations: sc.observations, rows })
@@ -342,6 +338,16 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
   const tallest = Math.max(...frames.map((f) => Math.max(...f.density)))
   ok(ref.yTop >= tallest, 'the fixed y ceiling must hold the tallest frame')
 
+  // maxGhosts thins the trail for the complete-pooling section, which draws one
+  // ghost per serve over all 650 of them. Two claims: it really does cut paths,
+  // and it is a no-op unless it binds -- a 30-serve panel must render exactly
+  // as it did before the option existed, or this "optimisation" has quietly
+  // restyled the section it was not meant to touch.
+  const paths = (opts) => count(draw({ step: 20, ...opts }).querySelector('svg'), 'path')
+  ok(paths({ maxGhosts: 4 }) < paths({}), 'maxGhosts must reduce the number of ghost paths')
+  ok(draw({ step: 20, maxGhosts: 64 }).outerHTML === draw({ step: 20 }).outerHTML,
+    'a maxGhosts budget wider than the trail must change nothing at all')
+
   // Layers suppress.
   ok(draw({ step: 10, layers: { ghosts: false } }).outerHTML !== draw({ step: 10 }).outerHTML,
     'turning off the ghost trail should change the drawing')
@@ -364,6 +370,156 @@ ok(at0.outerHTML !== at1.outerHTML, 'changing d* should change the chart')
   console.log(`  belief update ok (${frames.length} frames, player 31), one fixed domain ` +
     `[${ref.domain.map((v) => v.toFixed(2)).join(', ')}] and y top ${ref.yTop.toFixed(3)} ` +
     'at every step; two estimate ticks at every step')
+}
+
+// --- complete pooling: the same machine over every serve on the team -----
+// The section absorbs ~650 serves one at a time. Two things are load-bearing
+// here and nowhere else: the fixed ruler has to survive a sequence five times
+// longer than the one-player case, and the ghost trail has to stay bounded.
+//
+// SAMPLED, not exhaustive. The block above loops all 31 frames, which is fine
+// at 31 and would be minutes at 651.
+{
+  const { beliefWidth } = await import('../src/charts/beliefWidth.js')
+  const sc = read('scenarios/one_population__20260914.json')
+  const g = thetaGrid()
+  const rows = [...Array(sc.observations.y.length).keys()]
+  const frames = updateSequence({
+    grid: g, prior: { mean: 0, sd: 2 }, observations: sc.observations, rows, keepLike: false
+  })
+  const bounds = frameBounds(frames, g)
+  const steps = [0, 1, 5, 30, 130, 325, frames.length - 1]
+
+  let ref = null
+  for (const s of steps) {
+    const fig = beliefUpdate({ frames, bounds, grid: g, step: s, maxGhosts: 32, width: 700 })
+    const svg = fig.querySelector('svg')
+    ok(svg, `complete pooling step ${s}: the belief panel should render`)
+    const here = { domain: svg.__domain, yTop: svg.__yTop }
+    ref ??= here
+    ok(here.domain[0] === ref.domain[0] && here.domain[1] === ref.domain[1],
+      `complete pooling step ${s}: the x domain must not move`)
+    ok(here.yTop === ref.yTop, `complete pooling step ${s}: the y ceiling must not move`)
+    ok(count(svg, 'path') < 80,
+      `complete pooling step ${s}: maxGhosts must keep the trail bounded (${count(svg, 'path')} paths)`)
+  }
+
+  // The prior is the widest frame and the last frame is the tallest, so the one
+  // fixed ruler has to hold both ends of a 650-serve run at once.
+  const last = frames[frames.length - 1]
+  ok(ref.yTop >= Math.max(...last.density), 'the fixed ceiling must clear the final spike')
+  const p = frames[0].summary
+  ok(ref.domain[0] <= p.mean - 3 * p.sd && ref.domain[1] >= p.mean + 3 * p.sd,
+    'the fixed domain must still hold the prior')
+
+  const w = beliefWidth({ frames, mark: 130, width: 700 })
+  ok(w, 'the width trace should render')
+  ok(/width|sd/i.test(w.textContent), 'the width axis should say what it measures')
+  // sd*sqrt(n) settles near 2.18 in every shipped population; a constant far
+  // from that means the fit picked up the prior-dominated frames.
+  ok(w.__refConstant > 1.8 && w.__refConstant < 2.6,
+    `the 1/sqrt(n) constant should land near 2.18 (got ${w.__refConstant.toFixed(2)})`)
+
+  console.log(`  complete pooling ok (${frames.length} frames over all ${rows.length} serves), ` +
+    `sd ${frames[1].summary.sd.toFixed(2)} -> ${last.summary.sd.toFixed(3)}, ` +
+    `reference ${w.__refConstant.toFixed(2)}/sqrt(n), trail capped at 32 ghosts`)
+}
+
+// --- complete pooling over two skills: the belief surface ----------------
+if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
+  const { beliefSurface } = await import('../src/charts/beliefSurface.js')
+  const { logNormalPrior, normalize } = await import('../src/lib/bayesGrid.js')
+  const g = thetaGrid()
+
+  // Where the contour actually landed, in data coordinates. Plot puts a
+  // constant stroke on the parent <g>, not on each <path> (CLAUDE.md), so the
+  // group is what identifies the mark.
+  const W = 400; const H = 400; const ML = 40; const MR = 20; const MT = 20; const MB = 40
+  function centroid (svg, stroke) {
+    const grp = [...svg.querySelectorAll('g')].find((e) => e.getAttribute('stroke') === stroke)
+    const d = grp
+      ? [...grp.querySelectorAll('path')].map((e) => e.getAttribute('d') || '')
+        .sort((a, b) => b.length - a.length)[0] ?? ''
+      : ''
+    const pts = [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [+m[1], +m[2]])
+    if (!pts.length) return null
+    const mx = pts.reduce((a, q) => a + q[0], 0) / pts.length
+    const my = pts.reduce((a, q) => a + q[1], 0) / pts.length
+    return {
+      x: -6 + 12 * (mx - ML) / (W - ML - MR),
+      y: 6 - 12 * (my - MT) / (H - MT - MB)
+    }
+  }
+
+  // ORIENTATION, pinned. The grid form takes values row-major with y ASCENDING,
+  // so the mark must get y1 before y2; swapping them mirrors the surface
+  // vertically, which is both silent and entirely plausible-looking. A belief
+  // deliberately off-centre in BOTH axes and in different directions is the
+  // only thing that can catch it: put the mass upper-left and check it draws
+  // upper-left.
+  {
+    const left = normalize(logNormalPrior(g, -2, 0.5), g)
+    const up = normalize(logNormalPrior(g, 2, 0.5), g)
+    const svg = beliefSurface({
+      marginals: [left, up], grid: g,
+      bounds: { x: [-6, 6], y: [-6, 6] },
+      levels: [0.5], width: W, height: H
+    })
+    const c = centroid(svg, '#e69f00')
+    ok(c, 'the belief surface should draw a contour')
+    ok(Math.abs(c.x - -2) < 1.2,
+      `the surface must place skill 1 on the x axis (mass at -2, drew at ${c.x.toFixed(1)})`)
+    ok(Math.abs(c.y - 2) < 1.2,
+      `the surface must not be vertically mirrored (mass at +2, drew at ${c.y.toFixed(1)})`)
+  }
+
+  // The real thing: complete pooling over both skills of a real scenario.
+  const sc = read('scenarios-2d/distinct__20260914__2d.json')
+  const per = [0, 1].map((k) => {
+    const o = sc.skills[k].observations
+    return updateSequence({
+      grid: g, prior: { mean: 0, sd: 2 }, observations: o,
+      rows: [...Array(o.y.length).keys()], keepLike: false
+    })
+  })
+  const bounds = { x: frameBounds(per[0], g).x, y: frameBounds(per[1], g).x }
+  const at = (t) => [per[0][Math.min(650, Math.ceil(t / 2))].density,
+    per[1][Math.min(650, Math.floor(t / 2))].density]
+
+  let ref = null
+  for (const t of [0, 1, 2, 10, 300, 1300]) {
+    const svg = beliefSurface({
+      marginals: at(t), grid: g, bounds, ghosts: [], axis: t % 2 === 1 ? 1 : 2,
+      labels: sc.skill_labels, truth: { x: 0, y: 0 }, width: 700, height: 420
+    })
+    ok(svg, `belief surface at ${t} plays should render`)
+    ref ??= { x: svg.__domain, y: svg.__domainY }
+    ok(svg.__domain[0] === ref.x[0] && svg.__domain[1] === ref.x[1] &&
+       svg.__domainY[0] === ref.y[0] && svg.__domainY[1] === ref.y[1],
+    `belief surface at ${t} plays: both axes must be fixed across steps`)
+  }
+
+  // The claim the section is built on: the joint factorises, so the grid
+  // posterior must reproduce the shipped 2D fit AND carry no correlation.
+  const ship = sc.arms.complete.players2d
+  const s = per.map((f) => f[f.length - 1].summary)
+  ok(Math.abs(s[0].mean - ship.mean1[0]) < 0.01 && Math.abs(s[1].mean - ship.mean2[0]) < 0.01,
+    'the outer-product belief must land on the shipped complete-pooling means')
+  ok(Math.abs(ship.cor[0]) < 0.10,
+    `complete pooling cannot correlate the two skills (shipped cor ${ship.cor[0]})`)
+
+  const withGhosts = beliefSurface({
+    marginals: at(300), grid: g, bounds,
+    ghosts: [at(1), at(10), at(60)], labels: sc.skill_labels, width: 700, height: 420
+  })
+  ok(withGhosts.querySelectorAll('path').length >
+     beliefSurface({ marginals: at(300), grid: g, bounds, ghosts: [], labels: sc.skill_labels, width: 700, height: 420 })
+       .querySelectorAll('path').length,
+  'ghost beliefs should add marks rather than replace them')
+
+  console.log(`  belief surface ok (${per[0].length - 1} + ${per[1].length - 1} plays), ` +
+    `axis-aligned by construction, shipped cor ${ship.cor[0]}, ` +
+    `sd ${s[0].sd.toFixed(3)} x ${s[1].sd.toFixed(3)}`)
 }
 
 // --- the per-individual convergence sweep --------------------------------

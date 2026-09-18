@@ -1,5 +1,6 @@
 import { state, subscribe, setState, teamLabel, is2d, skillLabel } from '../state.js'
 import { renderWhenNear } from '../lib/scroll.js'
+import { numberOf, refTo } from '../lib/sectionOrder.js'
 import { zip } from '../lib/transforms.js'
 import { populationDensity } from '../charts/populationDensity.js'
 import { populationContours } from '../charts/populationContours.js'
@@ -19,7 +20,7 @@ export function theTeam () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">1 — The team</p>
+        <p class="eyebrow">${numberOf('team')} — The team</p>
         <h2 data-role="headline"></h2>
         <p data-role="lede"></p>
       </header>
@@ -126,7 +127,7 @@ export function theTeam () {
       scenario,
       index,
       layers,
-      // Null until clicked, matching section 2: an outline on player 1 that
+      // Null until clicked, matching the shrinkage chart: an outline on player 1 that
       // nobody chose reads as a bug, not a highlight.
       selectedPlayer: state.selectedPlayer,
       onSelect: (id) => setState({ selectedPlayer: id }, 'select'),
@@ -258,7 +259,8 @@ export function theTeam () {
     const labelStep = `Nothing above depends on which label the model is later given.
       ${cov.correct ? 'The <em>correct</em> label is the true group. ' : ''}${wrongText}
       Every team is a fresh draw of all three steps at its own seed; the fits in
-      sections 6 and 7 see byte-identical serves and differ only in the label.`
+      ${refTo(['covariate-correct', 'covariate-wrong'])} see byte-identical
+      serves and differ only in the label.`
 
     const table = `
       <table class="metric-table figures dgp-table">

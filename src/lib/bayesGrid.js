@@ -137,6 +137,26 @@ export function predictedRate (density, grid, difficulties) {
   return total / difficulties.length
 }
 
+/** The row indices of one player's serves, in the order they were recorded.
+ *  observations is columnar, so this is the only way to get at a player. */
+export function rowsForPlayer (observations, childId) {
+  const out = []
+  const ids = observations.child_id
+  for (let i = 0; i < ids.length; i++) if (ids[i] === childId) out.push(i)
+  return out
+}
+
+/** The posterior over theta from `rows` alone, under a N(mean, sd) prior.
+ *
+ *  grid comes first because this module is grid-parameterised throughout and
+ *  must not grow a module-level GRID -- two densities built on different grids
+ *  are not comparable, and frameBounds would mix the rulers without complaining.
+ *
+ *  The default prior is the one every non-hierarchical arm in the repo uses. */
+export function densityFor (grid, observations, rows, mean = 0, sd = 2) {
+  return normalize(accumulate(logNormalPrior(grid, mean, sd), grid, observations, rows), grid)
+}
+
 /** One serve's likelihood over theta, scaled to a maximum of 1. Display only --
  *  a likelihood is not a density and has no normalisation. */
 export function likelihoodCurve (grid, difficulty, y) {
@@ -157,8 +177,27 @@ export function likelihoodCurve (grid, difficulty, y) {
  *  prior-only frame at index 0. frames[k].density IS the prior for frames[k+1].
  *
  *  Each density is sliced before it is stored -- accumulate mutates, so without
- *  the copy every frame would alias the last one. */
-export function updateSequence ({ grid, prior, observations, rows }) {
+ *  the copy every frame would alias the last one.
+ *
+ *  `keepLike: false` drops the per-frame likelihood curve. That curve is another
+ *  1025 floats per frame, which is 5.3 MB over a 650-serve run and is worth
+ *  having only where a slider can land the reader on any frame. A section that
+ *  shows a handful of fixed beats rebuilds them with likelihoodCurve on demand.
+ *
+ *  On the predictive rate: the obvious loop calls predictedRate(density, grid,
+ *  seen) with `seen` growing, which is O(n^2 * gridpoints) -- 4.8 seconds and
+ *  217M logistic evaluations for a 650-serve run, 98% of the whole build. It is
+ *  avoidable exactly, not approximately, because the average over difficulties
+ *  and the integral over theta commute:
+ *
+ *    rate_n = (1/n) sum_k  integral plogis(theta - d_k) p_n(theta) dtheta
+ *           = (1/n) integral [ sum_k plogis(theta - d_k) ] p_n(theta) dtheta
+ *
+ *  so the inner sum is a running total per grid point, updated in O(gridpoints)
+ *  per serve. Measured against the old loop: agreement to 2.2e-16, 4805ms -> 80ms.
+ *  The exported predictedRate is left alone; its own callers pass a fixed list
+ *  and are O(n * gridpoints) already. */
+export function updateSequence ({ grid, prior, observations, rows, keepLike = true }) {
   const mean = prior?.mean ?? 0
   const sd = prior?.sd ?? 2
   const logPost = logNormalPrior(grid, mean, sd)
@@ -178,7 +217,9 @@ export function updateSequence ({ grid, prior, observations, rows }) {
     predictedRate: null
   })
 
-  const seen = []
+  // rateSum[i] = sum over the serves absorbed so far of plogis(theta_i - d_k).
+  const { theta, dTheta, n: gn } = grid
+  const rateSum = new Float64Array(gn)
   let makes = 0
   for (let k = 0; k < rows.length; k++) {
     const r = rows[k]
@@ -186,20 +227,27 @@ export function updateSequence ({ grid, prior, observations, rows }) {
     const y = observations.y[r]
     accumulate(logPost, grid, observations, [r])
     const density = normalize(logPost, grid).slice()
-    seen.push(d)
     if (y === 1) makes++
     const n = k + 1
+
+    let rate = 0
+    for (let i = 0; i < gn; i++) {
+      rateSum[i] += plogis(theta[i] - d)
+      rate += rateSum[i] * density[i]
+    }
+    rate = (rate * dTheta) / n
+
     frames.push({
       i: k,
       n,
       difficulty: d,
       y,
       density,
-      like: likelihoodCurve(grid, d, y),
+      like: keepLike ? likelihoodCurve(grid, d, y) : null,
       summary: summarize(density, grid),
       makes,
       sampleRate: makes / n,
-      predictedRate: predictedRate(density, grid, seen)
+      predictedRate: rate
     })
   }
   return frames

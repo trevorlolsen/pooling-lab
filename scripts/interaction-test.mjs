@@ -42,10 +42,29 @@ const { state, setState } = await import('../src/state.js')
 const { armTokens } = await import('../src/data.js')
 const { theTeam } = await import('../src/sections/team.js')
 const { adaptiveShrinkage } = await import('../src/sections/shrinkage.js')
-const { beliefUpdateSection } = await import('../src/sections/beliefUpdate.js')
+const { completePooling } = await import('../src/sections/completePooling.js')
+const { noPooling } = await import('../src/sections/noPooling.js')
 const { evidence } = await import('../src/sections/evidence.js')
 const { correctCovariateSplit, wrongCovariateSplit } =
   await import('../src/sections/covariateSplit.js')
+const { convergence } = await import('../src/sections/convergence.js')
+const { teamSweep } = await import('../src/sections/teamSweep.js')
+const { SECTION_ORDER, numberOf } = await import('../src/lib/sectionOrder.js')
+
+// ONE list, checked against sectionOrder.js -- which is the list main.js builds
+// the page from. This file used to carry three separate hardcoded orders that
+// could drift from each other and from main.js with nothing noticing.
+const SECTIONS = [
+  ['team', theTeam],
+  ['complete-pooling', completePooling],
+  ['no-pooling', noPooling],
+  ['shrinkage', adaptiveShrinkage],
+  ['covariate-correct', correctCovariateSplit],
+  ['covariate-wrong', wrongCovariateSplit],
+  ['evidence', evidence],
+  ['convergence', convergence],
+  ['team-sweep', teamSweep]
+]
 
 const index = read('index.json')
 
@@ -69,9 +88,11 @@ state.scale = 'probability'
 state.difficulty = 0
 
 // Mount exactly the way main.js does.
+// The non-fetching subset, in running order: the 1D checks below do not need
+// convergence or the team sweep, and both of those fetch on mount.
 const mounted = []
-for (const section of [theTeam, adaptiveShrinkage, beliefUpdateSection,
-  correctCovariateSplit, wrongCovariateSplit, evidence]) {
+for (const [id, section] of SECTIONS) {
+  if (id === 'convergence' || id === 'team-sweep') continue
   const { el, mount } = section()
   app.appendChild(el)
   mounted.push(mount() ?? (() => {}))
@@ -315,17 +336,56 @@ const beforeSelect = snap('shrinkage')
 setState({ selectedPlayer: 12 }, 'select')
 ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrinkage chart')
 
+// --- complete pooling: one belief over every serve on the team -----------
+{
+  const sec = document.getElementById('complete-pooling')
+  ok(sec, 'the complete-pooling section should mount')
+  ok(snap('complete-pooling').length > 0, 'the shared belief panel should render on mount')
+
+  const nObs = state.scenario.observations.y.length
+  const caption = sec.querySelector('[data-role="caption"]').textContent
+  ok(new RegExp(`of ${nObs} serves`).test(caption),
+    `the caption should account for all ${nObs} serves, not one player's`)
+  ok(/every player on the team/i.test(caption),
+    'the caption should say whose serves these are')
+
+  // The width trace is the section's second panel and carries the "diminishing
+  // returns" argument that the fixed-ruler panel cannot show.
+  ok(sec.querySelector('[data-role="width"] svg'), 'the width trace should render')
+  ok(/√n|sqrt/i.test(sec.querySelector('[data-role="width-caption"]').textContent),
+    'the width caption should name the 1/sqrt(n) reference')
+
+  // It follows Scale but deliberately NOT d*: the difficulties here are real
+  // per-serve data, not the rail's reference value. The ambient scale here is
+  // probability, so flip away and back rather than setting it to what it is.
+  const captionOf = () => sec.querySelector('[data-role="caption"]').textContent
+  ok(/success rate/i.test(captionOf()),
+    'the probability scale should quote a success rate for the team')
+  const onProbability = captionOf()
+  setState({ scale: 'theta' }, 'scale')
+  ok(captionOf() !== onProbability, 'the scale toggle should restate the shared belief')
+  ok(/ability scale/i.test(captionOf()), 'the theta scale should say so')
+  setState({ scale: 'probability' }, 'scale')
+  ok(captionOf() === onProbability, 'switching back should restore the caption')
+
+  const beforeD = captionOf()
+  setState({ difficulty: 1.0 }, 'difficulty')
+  ok(captionOf() === beforeD,
+    'd* must not move this section: its difficulties are real per-serve data')
+  setState({ difficulty: 0 }, 'difficulty')
+}
+
 // --- bayesian updating: stepping, shuffling, and the prior swap ----------
 // Known harness limitation: jsdom has no IntersectionObserver, so trackSteps
 // falls back to fire(0) (lib/scroll.js:42) and this harness only ever exercises
 // the belief scrolly at step 0. Step coverage for the belief panel comes from
 // render-test.mjs, which calls the chart module directly across steps. Do NOT
-// add an IntersectionObserver stub to widen this: three existing sections
+// add an IntersectionObserver stub to widen this: four existing sections
 // depend on the current fallback and would change behaviour under one.
 {
-  const sec = document.getElementById('belief')
-  ok(sec, 'the belief section should mount')
-  ok(snap('belief').length > 0, 'the guided belief panel should render on mount')
+  const sec = document.getElementById('no-pooling')
+  ok(sec, 'the no-pooling section should mount')
+  ok(snap('no-pooling').length > 0, 'the guided belief panel should render on mount')
 
   // The control bar drives the free-play figure, not the pinned scrolly one, so
   // these snapshot [data-role="free-chart"] rather than going through snap(),
@@ -395,14 +455,20 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   ok(/Player 31\b/.test(takeawayOf(sec, 'rate-takeaway')),
     'the rate readout should name the selected player')
 
+  // The prior swap lives in the shrinkage section now, so this is a
+  // CROSS-SECTION claim: shuffling here must not move the numbers there. It
+  // holds because the swap is computed from the destination posterior, which
+  // multiplication makes order-free -- keep the assertion, it is the one that
+  // would catch someone recomputing the swap from a step-indexed frame.
+  const shrink = () => document.getElementById('shrinkage')
   const endText = takeawayOf(sec, 'rate-takeaway')
-  const priorText = takeawayOf(sec, 'prior-takeaway')
+  const priorText = takeawayOf(shrink(), 'prior-takeaway')
   const beforeTrace = traceSnap()
   click(sec.querySelector('[data-act="shuffle"]'))
   await settle(80)
   ok(takeawayOf(sec, 'rate-takeaway') === endText,
     'shuffling the order must not change the final readout')
-  ok(takeawayOf(sec, 'prior-takeaway') === priorText,
+  ok(takeawayOf(shrink(), 'prior-takeaway') === priorText,
     'shuffling the order must not change where the prior swap lands')
   ok(traceSnap() !== beforeTrace, 'shuffling should change the path the running rate takes')
   click(sec.querySelector('[data-act="reset"]'))
@@ -417,13 +483,15 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
   await settle(80)
   ok(freeSnap() !== beforePlayer, 'changing player should redraw the belief panel')
-  ok(/Player 4\b/.test(takeawayOf(sec, 'prior-takeaway')),
-    'the prior-swap takeaway should follow the selected player')
+  // Selection flows FORWARD: the reader picks here, and the derivation in the
+  // next section names whoever they picked.
+  ok(/Player 4\b/.test(takeawayOf(shrink(), 'prior-takeaway')),
+    'the prior-swap takeaway should follow the player selected upstream')
 
-  // The 2x2's partial-pooling row is blank until the prior-swap section is
-  // reached; with no IntersectionObserver here, renderWhenNear fires at once.
+  // The 2x2's partial-pooling row is blank until the prior swap is reached;
+  // with no IntersectionObserver here, renderWhenNear fires at once.
   ok(/N\(.*\).*learned from the team/.test(
-    sec.querySelector('[data-role="partial-row"]')?.textContent ?? ''),
+    shrink().querySelector('[data-role="partial-row"]')?.textContent ?? ''),
   'the 2x2 should fill in the partial-pooling prior')
 
   // The Scale control reaches this section: it restates the same belief as a
@@ -450,15 +518,11 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
 // sections the 1D checks above skip (convergence, the team sweep) included,
 // since both fetch on mount and both have a 2D branch.
 if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
-  const { convergence } = await import('../src/sections/convergence.js')
-  const { teamSweep } = await import('../src/sections/teamSweep.js')
-  const SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence, teamSweep,
-    correctCovariateSplit, wrongCovariateSplit, evidence]
   const remount = () => {
     for (const teardown of mounted) teardown()
     mounted.length = 0
     app.innerHTML = ''
-    for (const section of SECTIONS) {
+    for (const [, section] of SECTIONS) {
       const { el, mount } = section()
       app.appendChild(el)
       mounted.push(mount() ?? (() => {}))
@@ -484,13 +548,37 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
     ok(chartSvg(id), `2D: ${id} should render a chart on mount`)
   }
 
-  // The belief walk-through is one skill at a time, so under the two-skill
-  // toggle it degrades to a note rather than drawing a surface.
+  // Complete pooling DOES render in two skills: the joint factorises exactly,
+  // so the belief is the outer product of the two per-skill posteriors and the
+  // contours come out axis-aligned by construction. That is a claim the
+  // one-skill view cannot make, so the section is fuller here, not thinner.
   {
-    const belief = document.getElementById('belief')
-    ok(belief, '2D: the belief section should still mount')
-    ok(belief.querySelector('.note'), '2D: the belief section should explain why it is absent')
-    ok(!chartSvg('belief'), '2D: the belief section should draw no chart')
+    const cp = document.getElementById('complete-pooling')
+    ok(cp, '2D: the complete-pooling section should mount')
+    ok(!cp.querySelector('.note'), '2D: complete pooling should draw, not opt out')
+    ok(chartSvg('complete-pooling'), '2D: complete pooling should render a belief surface')
+    const text = cp.textContent
+    ok(/plays absorbed/.test(text), '2D: the caption should count plays, not serves')
+    for (const label of state.scenario.skill_labels) {
+      ok(text.includes(label), `2D: the surface should name the "${label}" skill`)
+    }
+    ok(/square|axis-aligned|tilt/i.test(text),
+      '2D: the section should say the belief cannot tilt')
+  }
+
+  // The one-player walk-through IS one skill at a time -- a belief over two
+  // abilities from ONE player's plays is a different figure with a different
+  // lesson -- so it still degrades to a note.
+  {
+    const belief = document.getElementById('no-pooling')
+    ok(belief, '2D: the no-pooling section should still mount')
+    ok(belief.querySelector('.note'), '2D: the no-pooling section should explain why it is absent')
+    ok(!chartSvg('no-pooling'), '2D: the no-pooling section should draw no chart')
+    // The derivation grafted onto shrinkage is 1D-only for a different reason --
+    // it reads sc.observations, which under two skills lives inside skills[].
+    ok(document.getElementById('shrinkage').querySelector('[data-role="opening"]')
+      ?.classList.contains('note'),
+    '2D: the shrinkage derivation should degrade to a note, not read skill 1 silently')
   }
 
   // The band filter follows the dimension: plays, not serves, and it still
@@ -619,11 +707,8 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
 // likely to grow -- a remount rebuilding the entries rather than stacking a
 // second set of eight on top of the first.
 {
-  const { buildSectionNav } = await import('../src/lib/sectionNav.js')
-  const { convergence } = await import('../src/sections/convergence.js')
-  const { teamSweep } = await import('../src/sections/teamSweep.js')
-  const NAV_SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence,
-    teamSweep, correctCovariateSplit, wrongCovariateSplit, evidence]
+  const { buildSectionNav, splitEyebrow } = await import('../src/lib/sectionNav.js')
+  const NAV_SECTIONS = SECTIONS.map(([, factory]) => factory)
 
   const nav = document.createElement('nav')
   nav.id = 'section-nav'
@@ -645,12 +730,13 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   }
   const entriesIn = () => [...nav.querySelectorAll('button')]
   const click = (node) => node.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
-  // Same split main.js does: the number, then the title.
+  // The real splitter, not a second copy of it. lib/sectionNav.js exports it
+  // precisely so this harness can check the shipped rule rather than a
+  // paraphrase that can drift from it.
   const eyebrowOf = (section) => {
     const raw = (section.querySelector('.eyebrow')?.textContent ?? '')
       .replace(/\s+/g, ' ').trim()
-    const i = raw.indexOf('—')
-    return { number: raw.slice(0, i).trim(), title: raw.slice(i + 1).trim(), raw }
+    return { ...splitEyebrow(raw, section.id), raw }
   }
 
   state.dimension = '1d'
@@ -661,7 +747,11 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   state.scale = 'probability'
   let sections = remountAll()
   await settle(400)
-  ok(sections.length === 8, `expected eight mounted sections, found ${sections.length}`)
+  // The id sequence, not just the count: a reorder that keeps the same number
+  // of sections is exactly the change a count cannot see, and it is the change
+  // this file exists to catch.
+  ok(sections.map((s) => s.id).join() === SECTION_ORDER.join(),
+    `mounted sections should match SECTION_ORDER\n    got      [${sections.map((s) => s.id)}]\n    expected [${SECTION_ORDER}]`)
 
   const navigated = []
   buildSectionNav(nav, sections, (section) => navigated.push(section.id))
@@ -688,6 +778,10 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
     ok(button.querySelector('.rail-nav-title')?.textContent === title,
       `${section.id}: the entry title should be the eyebrow's title "${title}"`)
     ok(button.title === raw, `${section.id}: the full eyebrow should survive in the tooltip`)
+    // And the number the section wears must be the one sectionOrder.js assigns:
+    // this is what stops an eyebrow being renumbered by hand and drifting.
+    ok(Number(number) === numberOf(section.id),
+      `${section.id}: eyebrow says "${number}" but SECTION_ORDER says ${numberOf(section.id)}`)
     labels.push(raw)
   })
 
@@ -722,8 +816,8 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   sections = remountAll()
   await settle(400)
   buildSectionNav(nav, sections, () => {})
-  ok(entriesIn().length === 8,
-    `a one-group population should still get eight entries, found ${entriesIn().length}`)
+  ok(entriesIn().length === SECTION_ORDER.length,
+    `a one-group population should still get ${SECTION_ORDER.length} entries, found ${entriesIn().length}`)
   ok(/Not available/.test(document.getElementById('covariate-correct').textContent),
     'section 6 should be the unavailable one for a one-group population')
   ok(entriesIn().some((b) => b.dataset.target === 'covariate-correct'),
@@ -737,11 +831,11 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
     sections = remountAll()
     await settle(700)
     buildSectionNav(nav, sections, () => {})
-    ok(document.getElementById('belief').querySelector('.note'),
-      '2D: section 3 should be a note under the two-skill toggle')
-    ok(entriesIn().length === 8 &&
-      entriesIn().some((b) => b.dataset.target === 'belief'),
-    '2D: the note-only section 3 must keep its nav entry')
+    ok(document.getElementById('no-pooling').querySelector('.note'),
+      '2D: the no-pooling section should be a note under the two-skill toggle')
+    ok(entriesIn().length === SECTION_ORDER.length &&
+      entriesIn().some((b) => b.dataset.target === 'no-pooling'),
+    '2D: the note-only no-pooling section must keep its nav entry')
     state.dimension = '1d'
     state.scale = 'probability'
   }

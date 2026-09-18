@@ -1,5 +1,10 @@
 import { state, subscribe, setState, teamLabel, is2d, skillScenario, skillLabel } from '../state.js'
 import { renderWhenNear, trackSteps } from '../lib/scroll.js'
+import { numberOf, refTo } from '../lib/sectionOrder.js'
+import {
+  GRID, densityFor, rowsForPlayer, populationOf, followedPlayer, teamStats
+} from '../lib/beliefModel.js'
+import { summarize } from '../lib/bayesGrid.js'
 import { zip, armEstimates, truthValues } from '../lib/transforms.js'
 import { playerRows } from '../charts/playerRows.js'
 import { playerEllipses } from '../charts/playerEllipses.js'
@@ -78,6 +83,9 @@ const stepBody = (s, twoD) => (twoD
   ? (s.body2d ?? s.body) + (s.append2d ?? '')
   : s.body)
 
+/** Tabular-figures bold, for numbers quoted inside the derivation's prose. */
+const fig = (x, d = 3) => `<strong class="figures">${x.toFixed(d)}</strong>`
+
 /**
  * The caption names every mark the chart can draw: the segment, the selection
  * ring, the sort order, and -- only when the rail is showing posteriors -- what
@@ -150,12 +158,41 @@ export function adaptiveShrinkage () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">2 — Adaptive shrinkage</p>
+        <p class="eyebrow">${numberOf('shrinkage')} — Adaptive shrinkage</p>
         <h2>Players with less information borrow more from the team</h2>
         <p>Three models, the same forty players, the same axis. The only thing
            that changes between them is what they assume about how players
            relate to each other.</p>
       </header>
+
+      ${twoD
+        ? `<div class="note" data-role="opening">The derivation below follows one
+             skill at a time: it reruns a single player's serves from a different
+             prior, and in two skills that is a surface rather than a curve.
+             Switch the bar above back to one skill to read it. The comparison
+             underneath works in both.</div>`
+        : `<div data-role="opening">
+        <h3 class="subhead">Two extremes, and an empty cell</h3>
+        <p>Nothing in the last two sections was special to either model. It was
+           one prior and one set of serves, twice. Change either and you get a
+           different model out of the same machine.</p>
+        <table class="metric-table figures dgp-table">
+          <thead>
+            <tr><th></th><th>prior starts as</th><th>updated by</th></tr>
+          </thead>
+          <tbody data-role="frame-table"></tbody>
+        </table>
+        <p class="control-note" data-role="frame-note"></p>
+
+        <h3 class="subhead">Change only the prior</h3>
+        <p>The same player, the same serves, the same updating — started from
+           what the rest of the team already taught us instead of from nothing.
+           One knob. Watch what it does to a player you have barely seen, and to
+           one you have watched thirty times.</p>
+        <p class="takeaway" data-role="prior-takeaway"></p>
+        <p class="takeaway" data-role="closing"></p>
+      </div>`}
+
       <div class="scrolly">
         <div class="scrolly-steps" data-role="steps">
           ${STEPS.map((s, i) => `
@@ -194,10 +231,143 @@ export function adaptiveShrinkage () {
   let filterKey = null
   let step = STEPS.length - 1
   let ready = false
+  let partialRevealed = false  // the 2x2's third row, filled in on arrival
+
+  // --- the opening: two extremes, and the prior swap -----------------------
+  //
+  // This is where partial pooling is DERIVED, before the chart below compares
+  // it to anything. The reader has just watched the same updating machine run
+  // twice -- over the whole team, then over one player -- so the only honest
+  // thing left to change is the prior, and that is the argument here.
+  //
+  // One-skill only. Everything below reads sc.observations, which under two
+  // skills lives inside skills[], so teamStats and rowsForPlayer would silently
+  // read undefined. Quietly passing skillScenario(1) would be worse than
+  // opting out: "the same serves, the same arithmetic" is the claim, and
+  // silently meaning skill 1 breaks it.
+
+  /**
+   * Two extremes and an empty cell the reader fills in.
+   *
+   * The partial-pooling row stays blank until the prior-swap block below comes
+   * into view, because that is where the answer is demonstrated rather than
+   * asserted. In a harness with no IntersectionObserver renderWhenNear fires
+   * immediately, so the row is simply filled from the start there.
+   */
+  function renderFrameTable () {
+    const sc = state.scenario
+    const body = el.querySelector('[data-role="frame-table"]')
+    if (!body || !sc?.observations) return
+    const playerId = followedPlayer(sc, state.selectedPlayer)
+    const pop = populationOf(sc)
+    const nObs = sc.observations.y.length
+    const learned = pop
+      ? `N(${pop.mu.toFixed(2)}, ${pop.tau.toFixed(2)}²) — learned from the team`
+      : '—'
+    body.innerHTML = `
+      <tr><td><b>No pooling</b></td><td>N(0, 2) — ~flat on probability</td>
+          <td>only player ${playerId}'s serves</td></tr>
+      <tr><td><b>Complete pooling</b></td><td>N(0, 2) — one shared curve</td>
+          <td>all ${nObs} serves, into one number</td></tr>
+      <tr data-role="partial-row"><td><b>Partial pooling</b></td>
+          <td data-role="partial-prior">${partialRevealed ? learned : '?'}</td>
+          <td data-role="partial-data">${
+            partialRevealed ? `only player ${playerId}'s serves` : '?'}</td></tr>`
+    el.querySelector('[data-role="frame-note"]').textContent = partialRevealed
+      ? 'One knob, and it is the left-hand column. The serves in the right-hand ' +
+        'column never changed.'
+      : 'Two extremes and an empty row. Only one of the two columns has to change ' +
+        'to get partial pooling — work out which, then read on.'
+  }
+
+  function renderPriorTakeaway () {
+    const box = el.querySelector('[data-role="prior-takeaway"]')
+    if (!box) return
+    const sc = state.scenario
+    const pop = populationOf(sc)
+    const stats = teamStats(sc)
+    if (!pop || !stats || !sc?.observations) { box.innerHTML = ''; return }
+
+    const playerId = followedPlayer(sc, state.selectedPlayer)
+    const k = sc.truth.child_id.indexOf(playerId)
+    const rows = rowsForPlayer(sc.observations, playerId)
+
+    // Both priors at the END of the run. The old version of this paragraph ran
+    // a whole parallel updateSequence to get the learned-prior curve, because
+    // there it had to advance with a slider -- and an early build of that drew
+    // one density built from ALL the player's rows at every step, so at serve 1
+    // the reader was shown a belief that had already seen all thirty. There is
+    // no slider here, so one call is enough; do not reintroduce the parallel
+    // run, and if you ever do, make it advance.
+    const flat = summarize(densityFor(sc.observations, rows, 0, 2), GRID)
+    const learned = summarize(densityFor(sc.observations, rows, pop.mu, pop.tau), GRID)
+    const moved = learned.mean - flat.mean
+    const truth = sc.truth.theta_true[k]
+    const fitted = sc.arms?.none?.players
+    const fittedMean = fitted ? fitted.theta_mean[fitted.child_id.indexOf(playerId)] : null
+
+    // Adaptive shrinkage from first principles: the same prior swap, averaged
+    // over the sparsest band and over the best-observed one.
+    const { lo, hi, n, maeFlat, maeLearned, better } = stats
+    const ratio = hi.move > 1e-9 ? lo.move / hi.move : null
+    const teamWin = maeLearned < maeFlat
+    const errFlat = Math.abs(flat.mean - truth)
+    const errLearned = Math.abs(learned.mean - truth)
+
+    box.innerHTML = `
+      Player ${playerId}, ${fig(rows.length, 0)} serves. From the flat prior
+      their own data lands at ${fig(flat.mean)} (sd ${flat.sd.toFixed(3)}). From the
+      learned prior <span class="figures">N(${pop.mu.toFixed(2)},
+      ${pop.tau.toFixed(2)}²)</span> — same serves, same arithmetic — it lands
+      at ${fig(learned.mean)} (sd ${learned.sd.toFixed(3)}). The prior moved them
+      ${fig(moved, 3)}${
+        fittedMean != null
+          ? `, and the site's own partial-pooling estimate for them is ${fig(fittedMean)}`
+          : ''}.
+      <br><br>
+      Run that same swap on everyone. The ${fig(lo.count, 0)} players with
+      ${fig(lo.n, 0)} serves move ${fig(lo.move)} on average; the
+      ${fig(hi.count, 0)} with ${fig(hi.n, 0)} move ${fig(hi.move)} —
+      ${ratio ? `${fig(ratio, 1)}× less` : 'barely at all'}.
+      <strong>Nothing instructed it to.</strong> A wide belief is easy for a
+      prior to move and a narrow one is not.
+      <br><br>
+      For this player the learned prior lands
+      ${errLearned < errFlat ? 'closer to' : 'further from'} their true ability
+      (${fig(errLearned)} against ${fig(errFlat)}).
+      <span class="aside">One player proves nothing, so here is the whole team on
+      ${teamLabel() || 'this team'}: mean absolute error against the truth is
+      <b class="figures">${maeFlat.toFixed(3)}</b> from the flat prior and
+      <b class="figures">${maeLearned.toFixed(3)}</b> from the learned one, and the
+      learned prior helps <b class="figures">${better}</b> of ${n} players.
+      ${teamWin
+        ? 'It wins on average here.'
+        : 'It loses on average here — shrinkage is a mechanism, not a guarantee.'}
+      Change the population or the team in the bar above and watch that margin
+      move; on some draws it is thin enough to call noise.</span>`
+
+    el.querySelector('[data-role="closing"]').innerHTML = `
+      <strong>That is the whole of adaptive shrinkage.</strong> Not a new
+      mechanism — the same updating, started from what the population already
+      taught us instead of from nothing. Here it is on all forty players at once.
+      <span class="aside">The obvious objection is that the sparse players are
+      simply different people, and comparing them to the well-observed ones
+      proves nothing. ${refTo('convergence', { cap: true })} answers it by
+      holding one player fixed and varying only how much of them the model has
+      seen.</span>`
+  }
+
+  /** The opening is one-skill only; in 2D its container is already a note. */
+  function renderOpening () {
+    if (twoD) return
+    renderFrameTable()
+    renderPriorTakeaway()
+  }
 
   function render () {
     const { scenario, index, tokens, scale, difficulty } = state
     if (!scenario) return
+    renderOpening()
     const bands = scenarioBands(scenario)
     const key = bands.join(',')
     if (!filter || filterKey !== key) {
@@ -425,6 +595,17 @@ export function adaptiveShrinkage () {
   function mount () {
     renderWhenNear(el, () => { ready = true; render() })
 
+    // The 2x2's third row fills in when the reader reaches the prior swap that
+    // demonstrates it, not before. Nothing to observe in the 2D branch, where
+    // the opening is a note.
+    const priorBox = el.querySelector('[data-role="prior-takeaway"]')
+    const offReveal = priorBox
+      ? renderWhenNear(priorBox, () => {
+        partialRevealed = true
+        if (ready) renderFrameTable()
+      }, { rootMargin: '0px' })
+      : () => {}
+
     const offSteps = trackSteps(stepEls, (i) => {
       step = i
       for (const [j, s] of stepEls.entries()) {
@@ -447,6 +628,7 @@ export function adaptiveShrinkage () {
     window.addEventListener('resize', onResize)
 
     return () => {
+      offReveal()
       offSteps()
       offState()
       window.removeEventListener('resize', onResize)

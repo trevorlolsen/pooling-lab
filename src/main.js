@@ -2,10 +2,12 @@ import './styles.css'
 import { loadIndex, loadScenario, scenarioId, armTokens, hasDimension2d } from './data.js'
 import { trackSections } from './lib/scroll.js'
 import { buildSectionNav, keepEntryVisible } from './lib/sectionNav.js'
+import { SECTION_ORDER, refTo } from './lib/sectionOrder.js'
 import { state, setState } from './state.js'
 import { theTeam } from './sections/team.js'
 import { adaptiveShrinkage } from './sections/shrinkage.js'
-import { beliefUpdateSection } from './sections/beliefUpdate.js'
+import { completePooling } from './sections/completePooling.js'
+import { noPooling } from './sections/noPooling.js'
 import { convergence } from './sections/convergence.js'
 import { teamSweep } from './sections/teamSweep.js'
 import { correctCovariateSplit, wrongCovariateSplit } from './sections/covariateSplit.js'
@@ -25,9 +27,28 @@ const progress = document.getElementById('progress')
 const rail = document.getElementById('rail')
 const sectionNav = document.getElementById('section-nav')
 
-const SECTIONS = [theTeam, adaptiveShrinkage, beliefUpdateSection, convergence, teamSweep,
-  correctCovariateSplit, wrongCovariateSplit, evidence]
+// Paired with their ids so the running order can be checked against
+// SECTION_ORDER rather than trusted. Order here IS page order IS nav order.
+const SECTIONS = [
+  ['team', theTeam],
+  ['complete-pooling', completePooling],
+  ['no-pooling', noPooling],
+  ['shrinkage', adaptiveShrinkage],
+  ['covariate-correct', correctCovariateSplit],
+  ['covariate-wrong', wrongCovariateSplit],
+  ['evidence', evidence],
+  ['convergence', convergence],
+  ['team-sweep', teamSweep]
+]
 let mounted = []
+
+/** Which sections follow the Scale control, named by number rather than by hand. */
+const SCALE_SCOPE =
+  `${refTo(['complete-pooling', 'no-pooling', 'shrinkage', 'covariate-correct',
+    'covariate-wrong', 'evidence'],
+    { cap: true })} follow this; ` +
+  `${refTo('convergence')} is always on the ability scale and ` +
+  `${refTo('team-sweep')} is fixed at d* = 0`
 
 function fail (message) {
   app.innerHTML = ''
@@ -214,11 +235,30 @@ function mountSections () {
   mounted = []
   app.innerHTML = ''
   app.appendChild(hero())
-  for (const section of SECTIONS) {
+  for (const [, section] of SECTIONS) {
     const { el, mount } = section()
     app.appendChild(el)
     mounted.push(mount() ?? (() => {}))
   }
+
+  // Two ways the running order can drift, both silent without this. The static
+  // check catches the factory list disagreeing with sectionOrder.js; the
+  // mounted check catches a section whose own el.id is not what the list says
+  // it is -- the real failure mode for covariateSplit, whose id is a template.
+  //
+  // showRuntimeError rather than throw: mountSections runs inside boot()'s
+  // async chain and from two rail handlers, and throwing here would leave a
+  // half-mounted page with no nav and no explanation.
+  const declared = SECTIONS.map(([id]) => id).join()
+  const ids = [...app.querySelectorAll(':scope > section')].map((s) => s.id).join()
+  if (declared !== SECTION_ORDER.join()) {
+    showRuntimeError('section order',
+      new Error(`main.js lists [${declared}] but SECTION_ORDER is [${SECTION_ORDER}]`))
+  } else if (ids !== declared) {
+    showRuntimeError('section ids',
+      new Error(`mounted [${ids}] but the section list declares [${declared}]`))
+  }
+
   mountSectionNav()
 }
 
@@ -291,11 +331,16 @@ async function boot () {
     const locked = state.dimension === '2d'
     for (const b of railScale.querySelectorAll('button')) b.disabled = locked
     railScale.style.opacity = locked ? '0.4' : ''
+    // Restored, not cleared. This used to set '' in the unlocked branch, which
+    // meant the first touch of the dimension toggle destroyed the scope note
+    // for the rest of the session -- it was written in index.html and nothing
+    // ever put it back.
     railScale.title = locked
       ? 'Two skills are compared on the ability scale only: a serve difficulty d* applies to one kind of play, not to a plane of two'
-      : ''
+      : SCALE_SCOPE
     syncDifficultyEnabled()
   }
+  railScale.title = SCALE_SCOPE
   dimensionControl.hidden = !hasDimension2d(index)
   syncRailHeight()
   railDimension.addEventListener('click', async (event) => {

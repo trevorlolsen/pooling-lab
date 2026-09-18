@@ -1,5 +1,6 @@
 import { state, subscribe, is2d, skillLabel } from '../state.js'
 import { renderWhenNear } from '../lib/scroll.js'
+import { numberOf } from '../lib/sectionOrder.js'
 import { zip, borrowingTargets, plogis } from '../lib/transforms.js'
 import { borrowingSplit } from '../charts/borrowingSplit.js'
 import { borrowingSplit2d } from '../charts/borrowingSplit2d.js'
@@ -290,8 +291,10 @@ export function covariateSplit ({ armId, number, eyebrow }) {
   return { el, mount }
 }
 
+// The number comes from SECTION_ORDER, keyed on the id the factory will build
+// (`covariate-${armId}`), so these two renumber with everything else.
 export const correctCovariateSplit = () =>
-  covariateSplit({ armId: 'correct', number: '6', eyebrow: 'The right grouping' })
+  covariateSplit({ armId: 'correct', number: numberOf('covariate-correct'), eyebrow: 'The right grouping' })
 
 export const wrongCovariateSplit = () =>
-  covariateSplit({ armId: 'wrong', number: '7', eyebrow: 'The wrong grouping' })
+  covariateSplit({ armId: 'wrong', number: numberOf('covariate-wrong'), eyebrow: 'The wrong grouping' })

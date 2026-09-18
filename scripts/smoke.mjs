@@ -13,8 +13,8 @@ import {
   zip, interpolateGrid, armEstimates, borrowingTargets
 } from '../src/lib/transforms.js'
 import {
-  thetaGrid, logNormalPrior, accumulate, normalize, summarize, predictedRate, updateSequence,
-  mulberry32, frameBounds
+  thetaGrid, summarize, predictedRate, updateSequence,
+  mulberry32, frameBounds, rowsForPlayer, densityFor
 } from '../src/lib/bayesGrid.js'
 
 const D = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data')
@@ -104,14 +104,6 @@ console.log('borrowing targets: none=%d distinct, correct=%d distinct',
 // player at once, which a median of 1,000 comparisons catches immediately.
 {
   const g = thetaGrid()
-  const rowsByChild = (o) => {
-    const m = new Map()
-    for (let i = 0; i < o.child_id.length; i++) {
-      if (!m.has(o.child_id[i])) m.set(o.child_id[i], [])
-      m.get(o.child_id[i]).push(i)
-    }
-    return m
-  }
 
   let dm = 0; let ds = 0; let dq = 0; let dc = 0; let de = 0
   const meanDevs = []
@@ -121,15 +113,15 @@ console.log('borrowing targets: none=%d distinct, correct=%d distinct',
     for (const id of p.scenario_ids) {
       const s = read(`scenarios/${id}.json`)
       const o = s.observations
-      const rowsFor = rowsByChild(o)
-      const post = (rows, mean, sd) =>
-        summarize(normalize(accumulate(logNormalPrior(g, mean, sd), g, o, rows), g), g)
+      // The client's own helpers, not a second copy of them: this file exists
+      // to check that the shipped arithmetic is the arithmetic the site runs.
+      const post = (rows, mean, sd) => summarize(densityFor(g, o, rows, mean, sd), g)
       scenarios++
 
       // No pooling: prior N(0,2), this player's serves only.
       const np = s.arms.no_pool.players
       for (let k = 0; k < np.child_id.length; k++) {
-        const t = post(rowsFor.get(np.child_id[k]), 0, 2)
+        const t = post(rowsForPlayer(o, np.child_id[k]), 0, 2)
         const dev = Math.abs(t.mean - np.theta_mean[k])
         meanDevs.push(dev)
         dm = Math.max(dm, dev)
@@ -148,7 +140,7 @@ console.log('borrowing targets: none=%d distinct, correct=%d distinct',
       const { mu, tau } = s.arms.none.population
       const nn = s.arms.none.players
       for (let k = 0; k < nn.child_id.length; k++) {
-        de = Math.max(de, Math.abs(post(rowsFor.get(nn.child_id[k]), mu.mean, tau.mean).mean - nn.theta_mean[k]))
+        de = Math.max(de, Math.abs(post(rowsForPlayer(o, nn.child_id[k]), mu.mean, tau.mean).mean - nn.theta_mean[k]))
       }
     }
   }
@@ -171,17 +163,11 @@ console.log('borrowing targets: none=%d distinct, correct=%d distinct',
 {
   const g = thetaGrid()
   const o = sc.observations
-  const rowsFor = new Map()
-  for (let i = 0; i < o.child_id.length; i++) {
-    if (!rowsFor.has(o.child_id[i])) rowsFor.set(o.child_id[i], [])
-    rowsFor.get(o.child_id[i]).push(i)
-  }
-  const post = (rows, mean, sd) =>
-    summarize(normalize(accumulate(logNormalPrior(g, mean, sd), g, o, rows), g), g)
+  const post = (rows, mean, sd) => summarize(densityFor(g, o, rows, mean, sd), g)
 
   // Order invariance: the same serves in any order give the same posterior.
   // The section offers a "shuffle" control on exactly this claim.
-  const rows = rowsFor.get(sc.arms.no_pool.players.child_id[30])
+  const rows = rowsForPlayer(o, sc.arms.no_pool.players.child_id[30])
   const rnd = mulberry32(7)
   const shuffled = [...rows]
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -199,6 +185,32 @@ console.log('borrowing targets: none=%d distinct, correct=%d distinct',
     `predictive rate tracks the sample rate at n=${last.n}`)
   ok(frames.length === rows.length + 1, 'updateSequence emits a prior-only frame at n=0')
   ok(frames[0].n === 0 && frames[0].like === null, 'frame 0 is the prior, with no likelihood')
+
+  // The running predictive rate must equal the standalone one, frame by frame.
+  // updateSequence keeps a running sum per grid point rather than re-integrating
+  // over every serve seen so far -- that is what took a 650-serve build from
+  // 4.8s to 80ms, and it is exact, so a drift here means the running sum is
+  // wrong (stale, unreset, or divided by the wrong n) and every rate in the
+  // section is quietly off.
+  {
+    const ds = rows.map((r) => o.difficulty[r])
+    let worst = 0
+    for (const n of [1, 5, 15, rows.length]) {
+      const f = frames[n]
+      worst = Math.max(worst, Math.abs(f.predictedRate - predictedRate(f.density, g, ds.slice(0, n))))
+    }
+    ok(worst < 1e-9, `the running predictive rate matches the standalone one (worst ${worst.toExponential(1)})`)
+  }
+
+  // keepLike: false drops the likelihood curves and changes nothing else.
+  {
+    const lean = updateSequence({ grid: g, prior: { mean: 0, sd: 2 }, observations: o, rows, keepLike: false })
+    ok(lean.every((f) => f.like === null), 'keepLike: false drops every likelihood curve')
+    ok(lean.length === frames.length &&
+       lean.every((f, i) => Math.abs(f.summary.mean - frames[i].summary.mean) < 1e-12 &&
+                            Math.abs((f.predictedRate ?? 0) - (frames[i].predictedRate ?? 0)) < 1e-12),
+      'keepLike: false leaves the posteriors and rates untouched')
+  }
 
   console.log('bayes grid: order-invariant; predictive rate %s vs sample rate %s at n=%d',
     last.predictedRate.toFixed(3), last.sampleRate.toFixed(3), last.n)

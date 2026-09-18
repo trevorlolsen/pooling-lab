@@ -312,7 +312,10 @@ h3.subhead {
   .step, .progress { transition: none; }
 }
 
-/* --- section 3: stepping through one player's serves ------------------- */
+/* --- the belief sections: stepping through serves one at a time -------- */
+/* Both of them carry class="belief-section": complete pooling over the whole
+   team, then no pooling over one player. Rules that belong to a control bar
+   or a wide legend are scoped to that class rather than to either id. */
 
 /* Range inputs had no rule at all before this section: they inherited only the
    shared font family at the top of the file and rendered at the browser's
@@ -355,21 +358,24 @@ input[type='range']::-moz-range-thumb {
 input[type='range']:focus-visible { outline: 2px solid var(--partial); outline-offset: 3px; }
 
 /* The step controls sit next to a <select> and two segmented buttons, so the
-   label has to line them all up on one baseline. Scoped to this section: the
-   evidence section's .controls carries a long sentence that must still wrap. */
-#belief .controls label {
+   label has to line them all up on one baseline. Unscoped: verified that these
+   are the only <label>s inside any .controls on the site, and any future
+   control bar with one wants exactly this. The evidence section's .controls
+   carries a long sentence but no label, so its wrapping is untouched. */
+.controls label {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 12px;
   color: var(--ink-soft);
 }
-#belief [data-role='step-readout'] { white-space: nowrap; }
+[data-role='step-readout'] { white-space: nowrap; }
 
 /* Six layers is two more than any other section's legend, so the entries need
-   room to wrap onto a second row without the rows touching. Scoped to #belief:
-   the other legends fit on one line and are not this section's to restyle. */
-#belief .legend-toggle { display: flex; flex-wrap: wrap; gap: 0.3rem 0.35rem; }
+   room to wrap onto a second row without the rows touching. Scoped to the
+   belief sections: nothing else styles .legend-toggle at all, so unscoping this
+   would silently restyle four legends that currently fit on one line. */
+.belief-section .legend-toggle { display: flex; flex-wrap: wrap; gap: 0.3rem 0.35rem; }
 
 /* The belief panel and its likelihood strip are two separate <svg>s that share
    an x domain and a left margin. Stacking them with no gap is what makes the
@@ -382,13 +388,13 @@ input[type='range']:focus-visible { outline: 2px solid var(--partial); outline-o
   /* Stacked, the control bar is the thing that breaks first: it holds a select,
      two arrows, a slider and two buttons. Let the slider take a whole row and
      stop the notes from forcing a horizontal scroll. */
-  #belief .controls { gap: 0.5rem 0.7rem; }
-  #belief .controls input[type='range'] { width: 100%; flex: 1 1 100%; }
+  .belief-section .controls { gap: 0.5rem 0.7rem; }
+  .belief-section .controls input[type='range'] { width: 100%; flex: 1 1 100%; }
 }
 
 /* --- the section nav in the rail --------------------------------------- */
 
-/* Twenty-eight viewports of page across eight sections. The nav is a second
+/* Thirty-odd viewports of page across nine sections. The nav is a second
    row of the sticky rail: where you are, and one click to anywhere else.
    Entries are built by main.js from each section's own eyebrow. */
 
@@ -446,7 +452,8 @@ main > section { scroll-margin-top: var(--rail-h, 5.5rem); }
   color: var(--ink-faint);
 }
 /* The number always shows; the title is what gives way when space runs out.
-   The cap is set so all eight fit the rail's own 68rem measure: the six short
+   The cap was set so eight fit the rail's own 68rem measure; at nine the nav
+   starts to scroll at desktop width, which overflow-x already handles. The six short
    titles stay whole and only sections 4 and 5, whose eyebrows are sentences,
    are cut. */
 .rail-nav .rail-nav-title {
@@ -470,7 +477,7 @@ main > section { scroll-margin-top: var(--rail-h, 5.5rem); }
 
 @media (max-width: 860px) {
   .rail-nav { gap: 0.1rem; margin-top: 0; }
-  /* Eight entries do not fit a phone. Truncate harder and let the nav itself
+  /* Nine entries do not fit a phone. Truncate harder and let the nav itself
      scroll sideways: it is a flex item with min-width: 0 inside the rail, so
      this scrolls the row and never widens the page. */
   .rail-nav button { padding: 0.14rem 0.4rem; }

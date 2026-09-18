@@ -1,5 +1,6 @@
 import { state, subscribe, is2d, skillLabel } from '../state.js'
 import { renderWhenNear } from '../lib/scroll.js'
+import { numberOf } from '../lib/sectionOrder.js'
 import { zip, scenarioAccuracy } from '../lib/transforms.js'
 import { loadAllTeams, orderedArms } from '../data.js'
 import { errorByModel, isDashedArm } from '../charts/errorByModel.js'
@@ -23,7 +24,7 @@ export function evidence () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">8 — Did it help?</p>
+        <p class="eyebrow">${numberOf('evidence')} — Did it help?</p>
         <h2 data-role="headline">Shrinkage is a mechanism. Was it an improvement?</h2>
         <p>Moving an estimate is not the same as improving it. Because we
            simulated this population, we know every player's true ability — so we

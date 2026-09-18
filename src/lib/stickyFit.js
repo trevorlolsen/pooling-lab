@@ -33,7 +33,7 @@ function chromeAround (graphic, chartEl) {
  * Returns `fallback` under jsdom, where there is no layout to measure.
  *
  * `reserve` is for a container that holds more than the one chart being sized:
- * section 3's chart box carries the belief panel AND a 90px likelihood strip,
+ * the belief sections' chart boxes carry the belief panel AND a 90px likelihood strip,
  * and only the panel's height is being asked for. It comes off before `min`
  * and `max` apply, so those stay expressed in the units the caller cares
  * about -- the panel -- rather than in box-minus-strip.

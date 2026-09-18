@@ -1,4 +1,5 @@
 import { renderWhenNear } from '../lib/scroll.js'
+import { numberOf } from '../lib/sectionOrder.js'
 import { layerLegend } from '../lib/layers.js'
 import { zip } from '../lib/transforms.js'
 import { state, subscribe } from '../state.js'
@@ -26,7 +27,7 @@ export function teamSweep () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">5 — The team you have, and the population you don't</p>
+        <p class="eyebrow">${numberOf('team-sweep')} — The team you have, and the population you don't</p>
         <h2>Watch the whole team longer, and see what stops improving</h2>
         <p>One player, watched longer, converges on their own true ability. Now
            watch all eight, from a handful of serves each to a thousand, and

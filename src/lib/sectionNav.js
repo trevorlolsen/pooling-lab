@@ -23,11 +23,12 @@ export function splitEyebrow (text, fallback) {
  * Build the nav from the mounted sections. One entry each, in page order.
  *
  * The labels are read off each section's own `.eyebrow` rather than kept in a
- * second list: the eight sections are defined by the modules in sections/, and
+ * second list: the sections are defined by the modules in sections/, their
+ * numbering by lib/sectionOrder.js, and
  * a copy of their titles here would go stale the first time one of them is
  * renumbered or retitled.
  *
- * Sections that degrade to a `.note` -- section 3 under the two-skill toggle,
+ * Sections that degrade to a `.note` -- the belief sections under the two-skill toggle,
  * section 6 with no covariate -- still get an entry. They are still on the
  * page, and a nav that silently drops two of eight entries is worse than one
  * that takes the reader somewhere thin.

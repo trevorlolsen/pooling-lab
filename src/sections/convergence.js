@@ -1,5 +1,6 @@
 import { state } from '../state.js'
 import { renderWhenNear } from '../lib/scroll.js'
+import { numberOf } from '../lib/sectionOrder.js'
 import { layerLegend } from '../lib/layers.js'
 import { zip } from '../lib/transforms.js'
 import { ellipseArea } from '../lib/ellipse.js'
@@ -27,7 +28,7 @@ export function convergence () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">4 — The same player, watched longer</p>
+        <p class="eyebrow">${numberOf('convergence')} — The same player, watched longer</p>
         <h2>Watch one player earn the model's trust</h2>
         <p>Everything so far compared <em>different</em> players who happened to
            have different amounts of data — which leaves the obvious objection

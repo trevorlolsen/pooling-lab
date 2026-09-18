@@ -1,25 +1,39 @@
-import { state, subscribe, setState, teamLabel } from '../state.js'
+import { state, subscribe, setState } from '../state.js'
 import { renderWhenNear, trackSteps } from '../lib/scroll.js'
 import { layerLegend } from '../lib/layers.js'
 import {
-  thetaGrid, logNormalPrior, accumulate, normalize, summarize,
+  logNormalPrior, accumulate, normalize, summarize,
   predictedRate, updateSequence, mulberry32, frameBounds
 } from '../lib/bayesGrid.js'
+import {
+  GRID, rowsForPlayer, completeDensity as beliefCompleteDensity, followedPlayer
+} from '../lib/beliefModel.js'
 import { stickyChartHeight } from '../lib/stickyFit.js'
+import { numberOf, refTo } from '../lib/sectionOrder.js'
 import { beliefUpdate } from '../charts/beliefUpdate.js'
 import { beliefTrace } from '../charts/beliefTrace.js'
 
 /**
- * Section 3 — where the estimates actually come from.
+ * No pooling: one player, their own serves, and nothing else.
  *
- * Sections 2 and 4 show the model pulling small samples toward the team. This
- * one opens the machine: one player's serves are revealed one at a time, the
- * posterior after each is the prior for the next, and at the end the curve sits
- * on the number the site has been quoting all along.
+ * The section opens the machine. A single player's serves are revealed one at a
+ * time, the posterior after each is the prior for the next, and at the end the
+ * curve sits on the number the site has been quoting for that player all along.
+ * Complete pooling ran the identical arithmetic over the whole team one section
+ * earlier; the only thing that differs here is which serves go in.
+ *
+ * That is the setup for adaptive shrinkage. Two extremes have now been built out
+ * of one machine, and the section after this one changes the remaining knob --
+ * the prior -- rather than introducing a new mechanism.
  *
  * Nothing here is fitted at runtime in the MCMC sense. The exact posterior for
  * this model is a grid product over theta, so lib/bayesGrid.js reproduces the
  * shipped Stan answer from the per-serve stream the scenario already carries.
+ *
+ * This is also where the reader picks a player: selection flows FORWARD from
+ * here to the sections that name one, via beliefModel.followedPlayer. Nothing
+ * is written to state until the reader actually chooses, so a selection ring
+ * never appears on somebody nobody asked for.
  *
  * Rail controls: it follows population, seed (both arrive as a 'scenario'
  * change), Scale and the player selection. It deliberately ignores d* -- the
@@ -28,28 +42,10 @@ import { beliefTrace } from '../charts/beliefTrace.js'
  * two-skill toggle rather than drawing a belief surface.
  */
 
-// One grid for the whole module. thetaGrid is pure arithmetic over 1025 floats
-// and every consumer treats it as read-only.
-const GRID = thetaGrid()
-
 const plogis = (z) => (z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z)))
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1)
 const fmt = (x, d = 3) => `<strong class="figures">${x.toFixed(d)}</strong>`
 const pct = (x) => `<strong class="figures">${(100 * x).toFixed(0)}%</strong>`
-
-/** Row indices of one player's serves, in the order they were served. */
-function rowsForPlayer (observations, id) {
-  const rows = []
-  const c = observations.child_id
-  for (let i = 0; i < c.length; i++) if (c[i] === id) rows.push(i)
-  return rows
-}
-
-/** The posterior density for `rows` under a N(mean, sd) prior. */
-function densityFor (observations, rows, priorMean, priorSd) {
-  return normalize(
-    accumulate(logNormalPrior(GRID, priorMean, priorSd), GRID, observations, rows), GRID)
-}
 
 /**
  * A controlled what-if: the same belief, one more serve, at a chosen difficulty.
@@ -68,13 +64,16 @@ function oneMoreServe (observations, baseRows, difficulty, y) {
 /** The six guided beats. `target` is a serve count, clamped to what exists. */
 const STEP_TARGETS = [0, 1, 2, 5, 15, 30]
 
-export function beliefUpdateSection () {
+export function noPooling () {
   // Read once: main.js remounts every section when the dimension changes, so a
   // closure never has to cope with the payload shape moving under it.
   const twoD = state.dimension === '2d'
 
   const el = document.createElement('section')
-  el.id = 'belief'
+  el.id = 'no-pooling'
+  // Shared with completePooling: both carry a control bar and a wide legend,
+  // and styles.css scopes those rules to this class rather than to one id.
+  el.className = 'belief-section'
 
   if (twoD) {
     // The two-skill opt-out. A belief surface over two abilities is a different
@@ -83,8 +82,8 @@ export function beliefUpdateSection () {
     el.innerHTML = `
       <div class="wrap">
         <header>
-          <p class="eyebrow">3 — One serve at a time</p>
-          <h2>Where the estimates actually come from</h2>
+          <p class="eyebrow">${numberOf('no-pooling')} — No pooling</p>
+          <h2>Every player, on their own serves alone</h2>
         </header>
         <div class="note">This walk-through follows one skill at a time. It
           reveals a single player's plays one by one and watches a curve over
@@ -98,8 +97,8 @@ export function beliefUpdateSection () {
   el.innerHTML = `
     <div class="wrap">
       <header>
-        <p class="eyebrow">3 — One serve at a time</p>
-        <h2>Where the estimates actually come from</h2>
+        <p class="eyebrow">${numberOf('no-pooling')} — No pooling</p>
+        <h2>Every player, on their own serves alone</h2>
         <p data-role="lede"></p>
       </header>
 
@@ -155,26 +154,6 @@ export function beliefUpdateSection () {
       </figure>
       <p class="takeaway" data-role="rate-takeaway"></p>
 
-      <h3 class="subhead">Two extremes, and an empty cell</h3>
-      <p>Nothing above was special to no pooling. It was one prior and one set of
-         serves. Change either and you get a different model out of the same
-         machine — the black curve on the chart above is complete pooling, and it
-         is the identical arithmetic run over every serve in the scenario.</p>
-      <table class="metric-table figures dgp-table">
-        <thead>
-          <tr><th></th><th>prior starts as</th><th>updated by</th></tr>
-        </thead>
-        <tbody data-role="frame-table"></tbody>
-      </table>
-      <p class="control-note" data-role="frame-note"></p>
-
-      <h3 class="subhead">Change only the prior</h3>
-      <p>The blue curve is the same player, the same serves, the same updating —
-         started from what the rest of the team already taught us instead of from
-         nothing. One knob. Watch what it does to a player you have barely seen,
-         and to one you have watched thirty times.</p>
-      <p class="takeaway" data-role="prior-takeaway"></p>
-      <p class="takeaway" data-role="closing"></p>
     </div>`
 
   const chartBox = el.querySelector('[data-role="chart"]')
@@ -193,135 +172,25 @@ export function beliefUpdateSection () {
   let rows = []
   let frames = []
   let shuffles = 0          // 0 = true serve order; each click reseeds
-  let scenarioKey = null
   let completeDensity = null
-  let learnedFrames = null
   let bounds = null         // one fixed ruler for the guided panel
-  let freeBounds = null     // ditto for free play, with the learned curve in it
-  let defaultId = null      // cached: the rule costs 10 players' worth of passes
-  let population = null     // { mu, tau } from the hierarchical fit
-  let teamStats = null      // the prior swap scored across the whole team
-  let partialRevealed = false  // the 2x2's third row, filled in on arrival
 
   const scenario = () => state.scenario
   const indexOfPlayer = (id) => scenario().truth.child_id.indexOf(id)
 
-  /**
-   * The walk-through player.
-   *
-   * It wants the fullest data -- thirty serves -- but "the last player with the
-   * most serves" is not enough. A player whose first fifteen serves all go the
-   * same way gives a belief that slides steadily one way and never gets pushed
-   * back, which is the least interesting thing this panel can show: the whole
-   * point is that each serve's likelihood leans a direction and the belief
-   * answers. On one_population__20260914 that rule picked player 40, whose
-   * first miss is serve 16.
-   *
-   * So: among the best-observed players, take the one who has been seen to both
-   * make AND miss soonest -- the smallest serve count by which the evidence has
-   * pointed both ways -- and break ties on the largest final |posterior mean|,
-   * so the orange tick ends visibly off the grey one rather than on top of it.
-   */
-  function defaultPlayer () {
-    const sc = scenario()
-    const { child_id: ids, n_train: ns } = sc.truth
-    const maxN = Math.max(...ns)
-    let best = null
-    for (let i = 0; i < ids.length; i++) {
-      if (ns[i] !== maxN) continue
-      const r = rowsForPlayer(sc.observations, ids[i])
-      let makes = 0
-      let misses = 0
-      let mixed = Infinity
-      for (let k = 0; k < r.length; k++) {
-        if (sc.observations.y[r[k]] === 1) makes++
-        else misses++
-        if (makes > 0 && misses > 0) { mixed = k + 1; break }
-      }
-      const final = summarize(densityFor(sc.observations, r, 0, 2), GRID).mean
-      const cand = { id: ids[i], mixed, size: Math.abs(final) }
-      if (!best || cand.mixed < best.mixed ||
-        (cand.mixed === best.mixed && cand.size > best.size)) best = cand
-    }
-    return best ? best.id : ids[ids.length - 1]
-  }
+  /** Whichever player the site is following. The rule lives in beliefModel so
+   *  that every section naming a player names the same one. */
+  const wantedPlayer = () => followedPlayer(scenario(), state.selectedPlayer)
 
-  /** Whichever player the rest of the site is following, if this team has them. */
-  function wantedPlayer () {
-    const ids = scenario().truth.child_id
-    if (state.selectedPlayer != null && ids.includes(state.selectedPlayer)) {
-      return state.selectedPlayer
-    }
-    if (defaultId == null) defaultId = defaultPlayer()
-    return defaultId
-  }
-
-  /** Everything that depends on the scenario but not on the player. */
+  /** Everything that depends on the scenario but not on the player. The heavy
+   *  parts are memoised per scenario in beliefModel; this just reads them and
+   *  refills the player picker. */
   function rebuildScenario () {
     const sc = scenario()
-    const key = sc.scenario_id ?? `${state.population}__${state.seed}`
-    if (scenarioKey === key && completeDensity) return
-    scenarioKey = key
-    defaultId = null
-    const all = [...Array(sc.observations.y.length).keys()]
-    completeDensity = densityFor(sc.observations, all, 0, 2)
-    const pop = sc.arms?.none?.population
-    population = pop ? { mu: pop.mu.mean, tau: pop.tau.mean } : null
+    completeDensity = beliefCompleteDensity(sc)
 
     playerSelect.innerHTML = sc.truth.child_id.map((id, i) =>
       `<option value="${id}">Player ${id} — ${sc.truth.n_train[i]} serves</option>`).join('')
-
-    teamStats = buildTeamStats(sc)
-  }
-
-  /**
-   * The prior swap, run on every player on the team.
-   *
-   * None of this depends on which player is selected, and it is 80 grid
-   * posteriors over 650 rows -- far too much to redo every time the step slider
-   * moves. Cached per scenario.
-   */
-  function buildTeamStats (sc) {
-    if (!population) return null
-    const ids = sc.truth.child_id
-    const ns = sc.truth.n_train
-    const move = new Array(ids.length)
-    let maeFlat = 0
-    let maeLearned = 0
-    let better = 0
-    for (let i = 0; i < ids.length; i++) {
-      const r = rowsForPlayer(sc.observations, ids[i])
-      const a = summarize(densityFor(sc.observations, r, 0, 2), GRID).mean
-      const b = summarize(densityFor(sc.observations, r, population.mu, population.tau), GRID).mean
-      move[i] = Math.abs(b - a)
-      const ea = Math.abs(a - sc.truth.theta_true[i])
-      const eb = Math.abs(b - sc.truth.theta_true[i])
-      maeFlat += ea
-      maeLearned += eb
-      if (eb < ea) better++
-    }
-    // The sparsest band against the best-observed one, averaged rather than
-    // picked. Two individual players would make the ratio look much larger --
-    // player 4 against player 31 on the default team is 43x -- but that number
-    // is a coincidence of which two players you name. The band means are 3x-8x
-    // across all 25 shipped scenarios, and that is the claim that survives the
-    // reader changing team.
-    const minN = Math.min(...ns)
-    const maxN = Math.max(...ns)
-    const bandMean = (target) => {
-      let sum = 0
-      let count = 0
-      for (let i = 0; i < ns.length; i++) if (ns[i] === target) { sum += move[i]; count++ }
-      return { n: target, count, move: count ? sum / count : 0 }
-    }
-    return {
-      n: ids.length,
-      maeFlat: maeFlat / ids.length,
-      maeLearned: maeLearned / ids.length,
-      better,
-      lo: bandMean(minN),
-      hi: bandMean(maxN)
-    }
   }
 
   /** Everything that depends on the player or on the serve order. */
@@ -340,30 +209,11 @@ export function beliefUpdateSection () {
     frames = updateSequence({
       grid: GRID, prior: { mean: 0, sd: 2 }, observations: sc.observations, rows
     })
-    // The learned-prior belief is a PARALLEL RUN, not a single curve: the same
-    // serves in the same order, absorbed one at a time, started from
-    // N(mu-hat, tau-hat) instead of N(0, 2). It has to advance with the reader.
-    //
-    // This was a real bug: it used to be one density built from ALL of the
-    // player's rows and drawn at every step, so at serve 1 the reader was shown
-    // a belief that had already seen all thirty. It read as "the learned prior
-    // is dramatically sharper", when the sharpness was future data.
-    learnedFrames = population
-      ? updateSequence({
-        grid: GRID,
-        prior: { mean: population.mu, sd: population.tau },
-        observations: sc.observations,
-        rows
-      })
-      : null
     // One ruler per player, held fixed for every step. This is the figure: the
-    // curve narrows against axes that do not move. Both panels get their own,
-    // because only the free-play one draws the learned-prior curve -- and it is
-    // measured over the whole parallel run, so that curve never rescales either.
+    // curve narrows against axes that do not move. Both panels share it now
+    // that the learned-prior curve has gone: it was the only mark that could
+    // raise the ceiling for one panel and not the other.
     bounds = frameBounds(frames, GRID)
-    freeBounds = frameBounds(frames, GRID, {
-      extras: learnedFrames ? learnedFrames.map((f) => f.density) : []
-    })
     freeStep = Math.min(freeStep, frames.length - 1)
     playerSelect.value = String(id)
     slider.max = String(frames.length - 1)
@@ -425,7 +275,7 @@ export function beliefUpdateSection () {
         lede: `${serves(f.n)[0].toUpperCase()}${serves(f.n).slice(1)}.`,
         body: `Still wide — ${f.summary.sd.toFixed(2)} on θ, a 90% range of
           ${f.summary.low.toFixed(2)} to ${f.summary.high.toFixed(2)} — and still
-          honest about it. This is the state every five-serve player in section 2
+          honest about it. This is the state every five-serve player in ${refTo('shrinkage')}
           is left in, and a belief this wide is one the team can overrule cheaply.`
       }
     }
@@ -562,7 +412,7 @@ export function beliefUpdateSection () {
   function renderFreeChart () {
     if (!legend) {
       legend = layerLegend([
-        // Seven entries, so the labels stay short enough to sit on two rows.
+        // Six entries, so the labels stay short enough to sit on two rows.
         // What each curve MEANS is the figcaption's job -- a legend that
         // explains itself in full sentences crowds the panel it belongs to.
         // One toggle over both ticks: prior mean and posterior mean are only
@@ -572,7 +422,6 @@ export function beliefUpdateSection () {
         { id: 'ghosts', label: 'Every belief so far', marker: 'line', color: '#e69f00' },
         { id: 'estimates', label: 'Prior and current mean', marker: 'rule', color: '#64748b' },
         { id: 'complete', label: 'Complete pooling', marker: 'line', color: '#000000' },
-        { id: 'learned', label: 'Prior learned from the team', marker: 'line', color: '#56b4e9' },
         { id: 'truth', label: 'True ability', marker: 'rule', color: '#009e73' }
       ], () => renderFreeChart())
       el.querySelector('[data-role="legend"]').appendChild(legend.el)
@@ -586,15 +435,12 @@ export function beliefUpdateSection () {
       step: freeStep,
       layers: legend.get(),
       truth: scenario().truth.theta_true[k],
-      bounds: freeBounds,
+      bounds,
       // Both companions at the SAME number of serves the reader is on. Complete
       // pooling is the exception and is deliberately full-data: it is one
       // belief over everyone's serves, the same at every step and for every
       // player, which is the whole point of showing it.
-      extras: {
-        complete: completeDensity,
-        learned: learnedFrames?.[freeStep]?.density ?? null
-      },
+      extras: { complete: completeDensity },
       width: freeBox.clientWidth || 760,
       height: 320
     }))
@@ -613,8 +459,8 @@ export function beliefUpdateSection () {
     el.querySelector('[data-role="free-caption"]').innerHTML =
       `Player ${playerId}, ${freeStep} of ${frames.length - 1} serves absorbed. ` +
       `The black curve is <b>complete pooling</b> — the identical updating run over all ` +
-      `${nObs} serves in this scenario, which is why it does not move when you change player. ` +
-      `The blue curve is this player's own serves again, started from a prior learned from the team. ` +
+      `${nObs} serves in this scenario, which is ${refTo('complete-pooling')}, and is why it ` +
+      `does not move when you change player. ` +
       `The two ticks on the axis are the prior's answer (grey, always 0) and the model's now ` +
       `(orange); the strip below is the likelihood of the serve just absorbed, scaled to a maximum ` +
       `of 1, and it is the shape the belief was multiplied by to get here. ` +
@@ -671,8 +517,6 @@ export function beliefUpdateSection () {
     traceBox.appendChild(beliefTrace({ frames, width: traceBox.clientWidth || 760 }))
     renderRateTakeaway()
     renderTraceCaption()
-    renderFrameTable()
-    renderPriorTakeaway()
   }
 
   /**
@@ -717,103 +561,6 @@ export function beliefUpdateSection () {
       `This panel is the one thing on the page the Shuffle button really does change.`
   }
 
-  // --- two extremes, and the prior swap ------------------------------------
-
-  /**
-   * Two extremes and an empty cell the reader fills in.
-   *
-   * The partial-pooling row stays blank until the prior-swap section below comes
-   * into view, because that is where the answer is demonstrated rather than
-   * asserted. In a harness with no IntersectionObserver renderWhenNear fires
-   * immediately, so the row is simply filled from the start there.
-   */
-  function renderFrameTable () {
-    const nObs = scenario().observations.y.length
-    const body = el.querySelector('[data-role="frame-table"]')
-    const learned = population
-      ? `N(${population.mu.toFixed(2)}, ${population.tau.toFixed(2)}²) — learned from the team`
-      : '—'
-    body.innerHTML = `
-      <tr><td><b>No pooling</b></td><td>N(0, 2) — ~flat on probability</td>
-          <td>only player ${playerId}'s serves</td></tr>
-      <tr><td><b>Complete pooling</b></td><td>N(0, 2) — one shared curve</td>
-          <td>all ${nObs} serves, into one number</td></tr>
-      <tr data-role="partial-row"><td><b>Partial pooling</b></td>
-          <td data-role="partial-prior">${partialRevealed ? learned : '?'}</td>
-          <td data-role="partial-data">${
-            partialRevealed ? `only player ${playerId}'s serves` : '?'}</td></tr>`
-    el.querySelector('[data-role="frame-note"]').textContent = partialRevealed
-      ? 'One knob, and it is the left-hand column. The serves in the right-hand ' +
-        'column never changed.'
-      : 'Two extremes and an empty row. Only one of the two columns has to change ' +
-        'to get partial pooling — work out which, then read on.'
-  }
-
-  function renderPriorTakeaway () {
-    const box = el.querySelector('[data-role="prior-takeaway"]')
-    if (!population || !learnedFrames || !teamStats) { box.innerHTML = ''; return }
-    const sc = scenario()
-    const k = indexOfPlayer(playerId)
-    // Both at the END of the run: this paragraph is about where the two priors
-    // land once all the serves are in, so the comparison is matched by taking
-    // the last frame of each sequence. It does not follow the step slider.
-    const flat = frames[frames.length - 1].summary
-    const learned = learnedFrames[learnedFrames.length - 1].summary
-    const moved = learned.mean - flat.mean
-    const truth = sc.truth.theta_true[k]
-    const fitted = sc.arms?.none?.players
-    const fittedMean = fitted ? fitted.theta_mean[fitted.child_id.indexOf(playerId)] : null
-
-    // Adaptive shrinkage from first principles: the same prior swap, averaged
-    // over the sparsest band and over the best-observed one.
-    const { lo, hi, n, maeFlat, maeLearned, better } = teamStats
-    const ratio = hi.move > 1e-9 ? lo.move / hi.move : null
-    const nSelf = frames.length - 1
-    const teamWin = maeLearned < maeFlat
-
-    const errFlat = Math.abs(flat.mean - truth)
-    const errLearned = Math.abs(learned.mean - truth)
-
-    box.innerHTML = `
-      Player ${playerId}, ${fmt(nSelf, 0)} serves. From the flat prior
-      their own data lands at ${fmt(flat.mean)} (sd ${flat.sd.toFixed(3)}). From the
-      learned prior <span class="figures">N(${population.mu.toFixed(2)},
-      ${population.tau.toFixed(2)}²)</span> — same serves, same arithmetic — it lands
-      at ${fmt(learned.mean)} (sd ${learned.sd.toFixed(3)}). The prior moved them
-      ${fmt(moved, 3)}${
-        fittedMean != null
-          ? `, and the site's own partial-pooling estimate for them is ${fmt(fittedMean)}`
-          : ''}.
-      <br><br>
-      Run that same swap on everyone. The ${fmt(lo.count, 0)} players with
-      ${fmt(lo.n, 0)} serves move ${fmt(lo.move)} on average; the
-      ${fmt(hi.count, 0)} with ${fmt(hi.n, 0)} move ${fmt(hi.move)} —
-      ${ratio ? `${fmt(ratio, 1)}× less` : 'barely at all'}.
-      <strong>Nothing instructed it to.</strong> That is section 2's adaptive
-      shrinkage, derived here from first principles: a wide belief is easy for a
-      prior to move and a narrow one is not.
-      <br><br>
-      For this player the learned prior lands
-      ${errLearned < errFlat ? 'closer to' : 'further from'} their true ability
-      (${fmt(errLearned)} against ${fmt(errFlat)}).
-      <span class="aside">One player proves nothing, so here is the whole team on
-      ${teamLabel() || 'this team'}: mean absolute error against the truth is
-      <b class="figures">${maeFlat.toFixed(3)}</b> from the flat prior and
-      <b class="figures">${maeLearned.toFixed(3)}</b> from the learned one, and the
-      learned prior helps <b class="figures">${better}</b> of ${n} players.
-      ${teamWin
-        ? 'It wins on average here.'
-        : 'It loses on average here — shrinkage is a mechanism, not a guarantee.'}
-      Change the population or the team in the bar above and watch that margin
-      move; on some draws it is thin enough to call noise.</span>`
-
-    el.querySelector('[data-role="closing"]').innerHTML = `
-      Sections 2 and 4 showed the model pulling small samples toward the team.
-      Nothing in this section instructed it to. <strong>The pull is what happens
-      when the same updating process starts from what the population already
-      taught us, instead of from nothing.</strong>`
-  }
-
   // --- wiring ---------------------------------------------------------------
 
   function render () {
@@ -836,13 +583,6 @@ export function beliefUpdateSection () {
   function mount () {
     renderWhenNear(el, () => { ready = true; render() })
 
-    // The 2x2's third row fills in when the reader reaches the section that
-    // demonstrates it, not before.
-    const offReveal = renderWhenNear(el.querySelector('[data-role="prior-takeaway"]'), () => {
-      partialRevealed = true
-      if (ready && frames.length) renderFrameTable()
-    }, { rootMargin: '0px' })
-
     // jsdom has no IntersectionObserver, so trackSteps falls back to fire(0)
     // (lib/scroll.js:42) and interaction-test.mjs only ever sees this scrolly at
     // step 0. Step coverage for the belief panel comes from render-test.mjs,
@@ -861,7 +601,8 @@ export function beliefUpdateSection () {
       if (!ready) return
       if (reason === 'scenario') {
         // A new team invalidates the player, the frames and the pooled curves.
-        scenarioKey = null
+        // The pooled curves themselves are memoised per scenario in
+        // beliefModel, so this only drops what this closure holds.
         completeDensity = null
         frames = []
         shuffles = 0
@@ -926,7 +667,6 @@ export function beliefUpdateSection () {
     return () => {
       offSteps()
       offState()
-      offReveal()
       controls.removeEventListener('click', onControls)
       controls.removeEventListener('change', onChange)
       slider.removeEventListener('input', onSlide)
