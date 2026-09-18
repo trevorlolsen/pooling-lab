@@ -87,26 +87,33 @@ const stepBody = (s, twoD) => (twoD
 const fig = (x, d = 3) => `<strong class="figures">${x.toFixed(d)}</strong>`
 
 /**
- * The caption names every mark the chart can draw: the segment, the selection
- * ring, the sort order, and -- only when the rail is showing posteriors -- what
- * a box or ring is. It is rebuilt on every render because the view can change
- * without a remount.
+ * The caption names the marks and stops: one row (or point) per player, the
+ * pull, the click, and -- only when the rail is showing posteriors -- what a
+ * box or ring is. Everything past naming them (the sort order, the per-player
+ * readout, what the band buttons do, why a ring tilts) is a `.detail` run, so
+ * it is there for whoever wants it and out of the way of whoever is narrating.
+ *
+ * Returns MARKUP, not text: see the `.innerHTML` assignment in render(). It is
+ * rebuilt on every render because the view can change without a remount.
  */
 function captionText (twoD, view) {
   const base = twoD
     ? 'One point per player, in both skills at once. ' +
-      'The grey arrow is the pull: from what the player\'s own plays say to where the model put them. ' +
-      'Click a player to follow them; the black ring marks your choice, and once truth is drawn a dotted line runs from their estimate to their ×. Their numbers appear below the chart. ' +
+      'The grey arrow is the pull: own plays to where the model put them. ' +
+      'Click a player to follow them.' +
+      '<span class="detail"> The black ring marks your choice, and once truth is drawn a dotted line runs from their estimate to their ×; their numbers appear below the chart. ' +
       'Turn on Player numbers in the legend to see which × belongs to which point: the same number sits beside both. ' +
-      'The buttons above hide or show players by how many plays they have; the numbers below the chart always count everyone.'
-    : 'One row per player, grouped by how many serves we watched. Rows are sorted by their no-pooling estimate. ' +
-      'The grey segment is the pull: from what the player\'s own serves say to where the model put them. ' +
-      'Click a player to follow them; the black ring marks your choice. Their numbers appear below the chart. ' +
-      'The buttons above hide or show players by how many serves they have; the numbers below the chart always count everyone.'
+      'The buttons above hide or show players by how many plays they have; the numbers below the chart always count everyone.</span>'
+    : 'One row per player, grouped by serve count. ' +
+      'The grey segment is the pull: own serves to where the model put them. ' +
+      'Click a player to follow them.' +
+      '<span class="detail"> Rows are sorted by their no-pooling estimate, and the black ring marks your choice; their numbers appear below the chart. ' +
+      'The buttons above hide or show players by how many serves they have; the numbers below the chart always count everyone.</span>'
   if (view !== 'posterior') return base
   return base + (twoD
-    ? ' Each ring encloses 50% of that model\'s posterior; a tilted ring means the model is borrowing across skills.'
-    : ' Box = the middle 50% of that model\'s posterior, whiskers = 90%.')
+    ? ' Each ring encloses 50% of a model\'s posterior.' +
+      '<span class="detail"> A tilted ring means the model is borrowing across skills.</span>'
+    : ' Boxes are each model\'s middle 50%, whiskers 90%.')
 }
 
 /**
@@ -314,47 +321,65 @@ export function adaptiveShrinkage () {
     const errFlat = Math.abs(flat.mean - truth)
     const errLearned = Math.abs(learned.mean - truth)
 
+    // Three beats visible, everything else behind the rail's Detail toggle.
+    // What stays on screen is the claim in each beat -- the swap, the adaptive
+    // part with its punchline, and the admission that the team-wide margin can
+    // be noise. The two priors spelled out, the landing values and sds, the
+    // per-band averages, the whole-team scoreboard and the "change the
+    // population and watch" instruction are a table of numbers and a set of
+    // stage directions; the presenter reads them out or reveals them.
     box.innerHTML = `
-      Player ${playerId}, ${fig(rows.length, 0)} serves. From the flat prior
-      their own data lands at ${fig(flat.mean)} (sd ${flat.sd.toFixed(3)}). From the
-      learned prior <span class="figures">N(${pop.mu.toFixed(2)},
-      ${pop.tau.toFixed(2)}²)</span> — same serves, same arithmetic — it lands
-      at ${fig(learned.mean)} (sd ${learned.sd.toFixed(3)}). The prior moved them
+      Player ${playerId}, run twice on the same serves: only the prior differs.
+      <span class="detail">Once from the flat prior, which knows nothing about
+      anyone else; once from <span class="figures">N(${pop.mu.toFixed(2)},
+      ${pop.tau.toFixed(2)}²)</span>, the prior the rest of the team implies —
+      ${fig(rows.length, 0)} serves and the same arithmetic either way. The flat
+      run lands at ${fig(flat.mean)} (sd ${flat.sd.toFixed(3)}), the learned one
+      at ${fig(learned.mean)} (sd ${learned.sd.toFixed(3)}) — a move of
       ${fig(moved, 3)}${
         fittedMean != null
           ? `, and the site's own partial-pooling estimate for them is ${fig(fittedMean)}`
-          : ''}.
+          : ''}. For this player the learned prior lands ${
+        errLearned < errFlat ? 'closer to' : 'further from'} their true
+      ability, ${fig(errLearned)} away against ${fig(errFlat)}. </span>
       <br><br>
-      Run that same swap on everyone. The ${fig(lo.count, 0)} players with
-      ${fig(lo.n, 0)} serves move ${fig(lo.move)} on average; the
-      ${fig(hi.count, 0)} with ${fig(hi.n, 0)} move ${fig(hi.move)} —
-      ${ratio ? `${fig(ratio, 1)}× less` : 'barely at all'}.
-      <strong>Nothing instructed it to.</strong> A wide belief is easy for a
-      prior to move and a narrow one is not.
+      Sparse players move furthest, the best-observed barely at all.
+      <span class="detail">Run that same swap on everyone and the size of the
+      move tracks how much data each player brought${
+        ratio ? `: the sparsest band travels ${fig(ratio, 1)}× as far` : ''}. The
+      ${fig(lo.count, 0)} players with ${fig(lo.n, 0)} serves move
+      ${fig(lo.move)} on average; the ${fig(hi.count, 0)} with ${fig(hi.n, 0)}
+      move ${fig(hi.move)}. </span>
+      <strong>Nothing instructed it to.</strong>
+      <span class="detail"> A wide belief is easy for a prior to move and a
+      narrow one is not.</span>
       <br><br>
-      For this player the learned prior lands
-      ${errLearned < errFlat ? 'closer to' : 'further from'} their true ability
-      (${fig(errLearned)} against ${fig(errFlat)}).
-      <span class="aside">One player proves nothing, so here is the whole team on
-      ${teamLabel() || 'this team'}: mean absolute error against the truth is
-      <b class="figures">${maeFlat.toFixed(3)}</b> from the flat prior and
-      <b class="figures">${maeLearned.toFixed(3)}</b> from the learned one, and the
-      learned prior helps <b class="figures">${better}</b> of ${n} players.
+      Across the team the margin can be thin enough to call noise.
+      <span class="aside detail">One player proves nothing, so here is the whole
+      team on ${teamLabel() || 'this team'}: the learned prior helps
+      <b class="figures">${better}</b> of ${n} players. Mean absolute error
+      against the truth is <b class="figures">${maeFlat.toFixed(3)}</b> from the
+      flat prior and <b class="figures">${maeLearned.toFixed(3)}</b> from the
+      learned one.
       ${teamWin
         ? 'It wins on average here.'
         : 'It loses on average here — shrinkage is a mechanism, not a guarantee.'}
       Change the population or the team in the bar above and watch that margin
-      move; on some draws it is thin enough to call noise.</span>`
+      move.</span>`
 
+    // The forward reference stays visible: it is the reader's route out of an
+    // objection they are about to have. The objection spelled out is
+    // background, so it goes with the rest of the aside.
     el.querySelector('[data-role="closing"]').innerHTML = `
       <strong>That is the whole of adaptive shrinkage.</strong> Not a new
       mechanism — the same updating, started from what the population already
-      taught us instead of from nothing. Here it is on all forty players at once.
-      <span class="aside">The obvious objection is that the sparse players are
+      taught us instead of from nothing.
+      <span class="detail">Here it is on all forty players at once. </span>
+      ${refTo('convergence', { cap: true })} answers the obvious objection.
+      <span class="aside detail">That objection is that the sparse players are
       simply different people, and comparing them to the well-observed ones
-      proves nothing. ${refTo('convergence', { cap: true })} answers it by
-      holding one player fixed and varying only how much of them the model has
-      seen.</span>`
+      proves nothing. It is answered by holding one player fixed and varying
+      only how much of them the model has seen.</span>`
   }
 
   /** The opening is one-skill only; in 2D its container is already a note. */
@@ -398,7 +423,9 @@ export function adaptiveShrinkage () {
       host.innerHTML = ''
       host.appendChild(legend.el)
     }
-    el.querySelector('[data-role="caption"]').textContent = captionText(twoD, state.view)
+    // innerHTML, not textContent: captionText() returns markup, and a `.detail`
+    // span assigned as text would print as literal characters in the caption.
+    el.querySelector('[data-role="caption"]').innerHTML = captionText(twoD, state.view)
 
     // The pinned figure has to fit between the rail and the bottom of the
     // window, less the legend and caption sitting around it.
@@ -557,8 +584,20 @@ export function adaptiveShrinkage () {
   // skills a data point is a "play", not a serve.
   const unit = twoD ? 'plays' : 'serves'
 
-  /** "Players with 5 serves moved 0.061 on average. Players with 30 moved 0.019 — 3.1× less." */
-  function shrinkageSentence (sc, prefix = '') {
+  /**
+   * One scenario's figure for the adaptive-shrinkage claim, e.g. "The sparsest
+   * band moved 3.1x as far as the best-observed band."
+   *
+   * `lead` opens the sentence and supplies the subject in two skills, where the
+   * takeaway carries one of these per skill and cannot afford to name the
+   * sparsest band twice: '' in one skill, "In Serve: " in two.
+   *
+   * The two band averages go behind the rail's Detail toggle -- the chart above
+   * already shows those pulls as segments. The RATIO stays visible: it is the
+   * comparison the chart cannot make on its own, and it is what makes this
+   * takeaway visibly different from one team to the next.
+   */
+  function shrinkageSentence (sc, lead = '') {
     const shrink = zip(sc.derived.shrinkage_by_information)
     if (!shrink.length) return ''
     const low = shrink[0]
@@ -566,11 +605,18 @@ export function adaptiveShrinkage () {
     const ratio = high.mean_shrinkage > 0
       ? (low.mean_shrinkage / high.mean_shrinkage)
       : null
-    return `${prefix}Players with <strong class="figures">${low.n_train}</strong> ${unit} moved
-      <strong class="figures">${low.mean_shrinkage.toFixed(3)}</strong> on average.
-      Players with <strong class="figures">${high.n_train}</strong> moved
-      <strong class="figures">${high.mean_shrinkage.toFixed(3)}</strong>${
-        ratio ? ` — <strong class="figures">${ratio.toFixed(1)}×</strong> less` : ''}.`
+    // With a lead the subject is already implied by it; without one the
+    // sentence has to carry its own. The no-ratio branch always names the band,
+    // because "In Serve: did not move at all" would have no subject at all.
+    const claim = ratio
+      ? `${lead}${lead ? '' : 'The sparsest band moved '}<strong class="figures">${
+          ratio.toFixed(1)}×</strong> as far as the best-observed band.`
+      : `${lead}${lead ? 't' : 'T'}he sparsest band moved; the best-observed band did not.`
+    return `${claim}<span class="detail"> Players with
+      <strong class="figures">${low.n_train}</strong> ${unit} moved
+      <strong class="figures">${low.mean_shrinkage.toFixed(3)}</strong> on average;
+      players with <strong class="figures">${high.n_train}</strong> moved
+      <strong class="figures">${high.mean_shrinkage.toFixed(3)}</strong>. </span>`
   }
 
   function renderTakeaway () {
@@ -583,10 +629,12 @@ export function adaptiveShrinkage () {
     if (!opening) return
 
     el.querySelector('[data-role="takeaway"]').innerHTML = `
+      Every player was pulled toward the team, but not equally.
       ${opening}
       <strong>The model was never told how many ${unit} anyone had.</strong>
-      It worked that out from how uncertain each player's own data left it.
-      <span class="aside">This is one team — one random draw. Use
+      <span class="detail">It worked that out from how uncertain each player's
+      own data left it. </span>
+      <span class="aside detail">This is one team — one random draw. Use
       <b>${teamLabel()}</b> in the bar above to draw another; the pattern holds in
       all five. That check matters more later, where some conclusions do not
       survive it.</span>`

@@ -35,8 +35,9 @@ import { beliefSurface } from '../charts/beliefSurface.js'
  * The fixed ruler is kept, and it costs something: the prior frame draws at
  * about 4% of the panel height against 20% in the one-player section, because
  * the final curve is five times taller. That is not a bug to tune away -- area
- * is conserved, so a low wide mound becoming a tall narrow spike IS the lesson,
- * and the caption says so.
+ * is conserved, so a low wide mound becoming a tall narrow spike IS the lesson.
+ * The caption still says so, but behind the rail's Detail toggle: the visible
+ * caption names the marks and stops, because this page is narrated over.
  *
  * TWO SKILLS. Unlike the one-player section, this one does NOT opt out under the
  * two-skill toggle -- see twoSkillSection below. Complete pooling's joint belief
@@ -192,9 +193,11 @@ function twoSkillSection (el) {
     if (k === 3 || k === 4) {
       return {
         lede: `${plays(t)[0].toUpperCase()}${plays(t).slice(1)}.`,
-        body: `${fmt(a1, 0)} ${names[0].toLowerCase()}s and ${fmt(a2, 0)}
-          ${names[1].toLowerCase()}s, and the region is down to
-          ${fmt(s1, 2)} by ${fmt(s2, 2)} on the two abilities.
+        body: `The region keeps closing in on both axes at once, and keeps its
+          corners square to them.
+          <span class="detail">${fmt(a1, 0)} ${names[0].toLowerCase()}s and
+          ${fmt(a2, 0)} ${names[1].toLowerCase()}s, and it is down to
+          ${fmt(s1, 2)} by ${fmt(s2, 2)} on the two abilities.</span>
           ${skill ? `This one was a ${names[skill - 1].toLowerCase()}.` : ''}`
       }
     }
@@ -245,22 +248,28 @@ function twoSkillSection (el) {
 
     const [s1, s2] = sdAt(t)
     el.querySelector('[data-role="caption"]').innerHTML =
-      `${t} of ${total} plays absorbed — ${a1} ${skillLabel(1).toLowerCase()}s and ` +
-      `${a2} ${skillLabel(2).toLowerCase()}s, taken in turn. ` +
-      'The filled regions are the smallest areas holding 50% and 90% of the belief' +
+      // Visible: one sentence naming the marks, nothing else. The counts, the
+      // widths, why the axes are fixed and squared up, what a tilt would have
+      // meant and which scale this is drawn on are all behind the rail's Detail
+      // toggle -- this panel is narrated over, and none of that is a mark.
+      'One shared pair of abilities for the whole team. ' +
+      'The filled regions hold 50% and 90% of the belief' +
       // No ghosts on the opening beat, and promising rings that are not there
       // is exactly the sort of caption that teaches a reader to stop trusting
       // captions.
-      (t > 0
-        ? '; the faint rings behind them are a sample of every belief this team has already been given. '
-        : '. ') +
-      `It is ${s1.toFixed(2)} wide and ${s2.toFixed(2)} tall on the two ability scales. ` +
-      (skill ? 'The grey bar marks the axis the last play spoke to. ' : '') +
+      (t > 0 ? ', faint rings earlier ones' : '') +
+      (skill ? ', the grey bar the axis just played' : '') +
+      ', and the green cross the true mean. ' +
+      `<span class="detail">${t} of ${total} plays absorbed — ${a1} ` +
+      `${skillLabel(1).toLowerCase()}s and ${a2} ${skillLabel(2).toLowerCase()}s, ` +
+      `taken in turn. The region is ${s1.toFixed(2)} wide and ${s2.toFixed(2)} tall ` +
+      'on the two ability scales. ' +
       'Both axes are fixed across every step and share one scale, so the shrinking is real ' +
-      'and a round belief looks round. ' +
-      'The green crosshair is the true population mean, which is what complete pooling is aiming at. ' +
+      'and a round belief looks round. Watch whether it ever leans: a tilt would mean the ' +
+      'model had found the two skills to be related. The cross marks the population mean ' +
+      'complete pooling is aiming at. ' +
       'Shown on the ability scale θ: a density does not survive being bent through plogis, ' +
-      'and warping each axis separately would draw a shape that means nothing.'
+      'and warping each axis separately would draw a shape that means nothing.</span>'
 
     el.querySelector('[data-role="lede"]').innerHTML =
       `The same loop as ever — start from a prior, multiply by what you just saw, call the ` +
@@ -272,16 +281,22 @@ function twoSkillSection (el) {
     const [s1, s2] = sdAt(total)
     const [p1, p2] = sdAt(1)
     const cor = scenario().arms?.complete?.players2d?.cor?.[0]
+    // The fitted correlation stays on screen with the toggle off. It is the one
+    // figure here that moves when the reader switches team or population, so
+    // putting it away would leave a takeaway that reads the same for every draw
+    // -- and watching this number stay at zero across draws IS the claim.
     el.querySelector('[data-role="takeaway"]').innerHTML = `
-      After ${fmt(total, 0)} plays the shared belief is ${fmt(s1)} by ${fmt(s2)},
-      down from ${fmt(p1, 2)} by ${fmt(p2, 2)} after the first.
-      <strong>And it is exactly as square as it started.</strong>
+      Every play tightened the region, and not one of them turned it.
+      <span class="detail">After ${fmt(total, 0)} plays the shared belief is
+      ${fmt(s1)} by ${fmt(s2)}, down from ${fmt(p1, 2)} by ${fmt(p2, 2)} after
+      the first.</span>
+      <strong>It is exactly as square as it started.</strong>
       ${cor != null
         ? `The fitted model agrees: it puts the correlation between the two
-           shared abilities at ${fmt(cor, 3)}, which is zero to within the noise
-           of a four-thousand-draw summary.`
+           shared abilities at ${fmt(cor, 3)}.<span class="detail"> That is zero
+           to within the noise of a four-thousand-draw summary.</span>`
         : ''}
-      <span class="aside">That is forced, not fitted.
+      <span class="aside detail">That is forced, not fitted.
       <code>complete_pooling_2d.stan</code> gives the shared pair an independent
       prior on each component, and every play touches exactly one of them — so
       the joint posterior is the product of two separate beliefs and its contours
@@ -395,18 +410,28 @@ export function completePooling () {
    * Same arithmetic as the one-player section's, over every difficulty in the
    * scenario instead of one player's. The panel itself stays on θ: a density
    * does not survive being bent through plogis without its Jacobian.
+   *
+   * The whole line sits behind the Detail toggle: which scale the reader is on
+   * is a control caveat, already said by the rail's Scale button and by the
+   * chart's own axis, and the caption was the third place saying it. It is
+   * returned as one `.detail` span so the caption above can concatenate it
+   * without knowing that.
    */
   function scaleLine (density) {
-    if (state.scale !== 'probability') return 'Shown on the ability scale θ.'
+    if (state.scale !== 'probability') {
+      return '<span class="detail">Shown on the ability scale θ.</span>'
+    }
     const ds = allDifficulties(scenario())
     const rate = predictedRate(density, GRID, ds)
     const s = summarize(density, GRID)
     const dbar = ds.reduce((a, b) => a + b, 0) / ds.length
-    return `On the probability scale: against the serves this team actually faces, ` +
-      `this belief puts the average success rate at ${(100 * rate).toFixed(0)}%, and a 90% range ` +
+    return '<span class="detail">On the probability scale the same belief is restated as a ' +
+      'success rate, against the serves this team actually faces rather than against an ' +
+      `average one. It puts that rate at ${(100 * rate).toFixed(0)}%, with a 90% range ` +
       `of ${(100 * plogis(s.low - dbar)).toFixed(0)}% to ${(100 * plogis(s.high - dbar)).toFixed(0)}% ` +
       `for a serve of average difficulty (d = ${dbar.toFixed(2)}). ` +
-      `The panel itself stays on θ — a density does not survive being bent through plogis.`
+      'The panel itself stays on θ — a density does not survive being bent through ' +
+      'plogis.</span>'
   }
 
   const plogis = (z) => (z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z)))
@@ -437,9 +462,9 @@ export function completePooling () {
         lede: 'Before anyone serves, we have to believe something.',
         body: `One ability, shared by the whole team, and a prior of
           <span class="figures">N(0, 2)</span> on it — the identical prior every
-          player gets to themselves in ${refTo('no-pooling')}. Its 90% range runs
-          ${fmt(f.summary.low, 2)} to ${fmt(f.summary.high, 2)}, which is very
-          nearly the whole range there is.`
+          player gets to themselves in ${refTo('no-pooling')}. Its 90% range is
+          very nearly the whole range there is<span class="detail">, running
+          ${fmt(f.summary.low, 2)} to ${fmt(f.summary.high, 2)}</span>.`
       }
     }
     if (k === 1) {
@@ -456,11 +481,13 @@ export function completePooling () {
       const band = bandSd(Math.min(...scenario().truth.n_train))
       return {
         lede: 'Five serves in.',
-        body: `The shared belief is ${sd(f.summary.sd)} wide${band != null
-          ? ` — already about as sharp as a five-serve player's own belief ever
-             gets (${fmt(band, 2)} on average)`
-          : ''}. Five serves is five serves. It does not yet matter that they
-          came from different people.`
+        body: `${band != null
+          ? `The shared belief is already about as sharp as a five-serve player's
+             own belief ever gets<span class="detail"> — ${sd(f.summary.sd)} wide,
+             against ${fmt(band, 2)} on average for those players</span>`
+          : `The shared belief has already tightened a long way<span class="detail">,
+             to ${sd(f.summary.sd)} wide</span>`}. Five serves is five serves. It
+          does not yet matter that they came from different people.`
       }
     }
     if (k === 3) {
@@ -468,10 +495,12 @@ export function completePooling () {
       const left = frames.length - 1 - at
       return {
         lede: 'Thirty serves in, and this is where it gets interesting.',
-        body: `${sd(f.summary.sd)} wide${band != null
-          ? ` — as sharp as the <em>best</em>-observed player on the team ever gets
-             about themselves (${fmt(band, 2)})`
-          : ''}. And there are still ${fmt(left, 0)} serves to come. This is the
+        body: `${band != null
+          ? `The team's shared belief is now as sharp as the <em>best</em>-observed
+             player on the team ever gets about themselves<span class="detail"> —
+             ${sd(f.summary.sd)} against ${fmt(band, 2)}</span>`
+          : `The shared belief is sharper than any one player's<span class="detail">,
+             at ${sd(f.summary.sd)} wide</span>`}. And there are still ${fmt(left, 0)} serves to come. This is the
           bargain complete pooling offers: certainty about the average, bought by
           refusing to believe anyone differs from it.`
       }
@@ -480,19 +509,19 @@ export function completePooling () {
       const prev = frames[stepIndex(3)]
       return {
         lede: 'A fifth of the way.',
-        body: `${sd(f.summary.sd)}, against ${sd(prev.summary.sd)} at
-          ${fmt(prev.n, 0)}. Four times the data for about half the width — which
-          is the rate this is going to keep paying, and the next panel is where
-          that becomes obvious.`
+        body: `<span class="detail">${sd(f.summary.sd)}, against
+          ${sd(prev.summary.sd)} at ${fmt(prev.n, 0)}. </span>Four times the data
+          for about half the width — which is the rate this is going to keep
+          paying, and the next panel is where that becomes obvious.`
       }
     }
     const mid = frames[stepIndex(4)]
     return {
       lede: `All ${fmt(last.n, 0)} serves, and we are done.`,
-      body: `${sd(last.summary.sd)} wide — roughly five times sharper than any
-        single player's belief about themselves, and only
-        ${fmt(mid.summary.sd / last.summary.sd, 1)}× sharper than it was at
-        ${fmt(mid.n, 0)} serves, for five times the data. <strong>One number,
+      body: `Roughly five times sharper than any single player's belief about
+        themselves<span class="detail">, at ${sd(last.summary.sd)} wide</span> —
+        and yet only ${fmt(mid.summary.sd / last.summary.sd, 1)}× sharper than it
+        was at ${fmt(mid.n, 0)} serves, for five times the data. <strong>One number,
         known very precisely.</strong> The question the rest of the site asks is
         whether it is the number you wanted.`
     }
@@ -525,15 +554,20 @@ export function completePooling () {
       height: stickyChartHeight(chartBox, { min: 220, max: 340, fallback: 320, reserve: 90 })
     }))
 
+    // Visible: one sentence naming the marks, because this panel is narrated
+    // over. Everything that explains or justifies them -- what the strip is
+    // scaled to, why the ruler is fixed, why the opening curve is a smear, and
+    // which scale we are on -- sits behind the rail's Detail toggle.
     el.querySelector('[data-role="caption"]').innerHTML =
-      `${at} of ${frames.length - 1} serves absorbed, from every player on the team. ` +
-      'Orange is the belief now, grey dashed is the belief one serve ago, and the faint orange ' +
-      'threads behind them are a sample of every belief this team has already been given. ' +
-      'The strip below is the current serve\'s likelihood, scaled to a maximum of 1. ' +
-      'Both axes are fixed across every step, so the narrowing you see is real and not the ruler ' +
-      'shrinking with the curve — which is also why the opening curve is such a low, wide smear. ' +
-      'It holds the same amount of belief as the spike at the end; it is just spread over ' +
-      'everything it could have been. ' +
+      'One shared belief, built from the whole team\'s serves. ' +
+      'Orange is the belief now, grey dashed one serve ago, the faint threads earlier beliefs, ' +
+      'and the strip below this serve\'s likelihood. ' +
+      `<span class="detail">${at} of ${frames.length - 1} serves absorbed. ` +
+      'The strip is scaled to a maximum of 1, and it is the shape the belief was multiplied by ' +
+      'to get here. Both axes are fixed across every step, so the narrowing you see is real and ' +
+      'not the ruler shrinking with the curve — which is also why the opening curve is such a ' +
+      'low, wide smear. It holds the same amount of belief as the spike at the end; it is just ' +
+      'spread over everything it could have been. </span>' +
       scaleLine(frames[at].density)
 
     el.querySelector('[data-role="lede"]').innerHTML =
@@ -555,25 +589,36 @@ export function completePooling () {
     const half = frames.find((f) => f.n > 0 && f.summary.sd <= frames[1].summary.sd / 2)
     const c = svg.__refConstant
 
+    // The constant stays visible: it names the dashed mark, and it is the one
+    // thing on this panel that moves when the reader switches team. Why it is
+    // fitted where it is, and why the axis is linear, are arguments about the
+    // chart rather than marks on it, so they go behind the Detail toggle.
     el.querySelector('[data-role="width-caption"]').innerHTML =
       `The width of the shared belief after each serve, with the serve you are standing on marked. ` +
-      `The dashed line is <span class="figures">${fmt(c, 2)}/√n</span>, fitted on the tail. ` +
-      `The axis is linear on purpose: the shape — a cliff, then a floor — is the whole point, ` +
-      `and a log axis would straighten it into a line and hide it.`
+      `The dashed line is <span class="figures">${fmt(c, 2)}/√n</span>.` +
+      `<span class="detail"> It is fitted on the tail. The axis is linear on purpose: the shape ` +
+      `— a cliff, then a floor — is the whole point, and a log axis would straighten it into a ` +
+      `line and hide it.</span>`
 
     el.querySelector('[data-role="width-takeaway"]').innerHTML = `
-      The first ${fmt(half ? half.n : 40, 0)} serves halve the width. Getting the
+      The first ${fmt(half ? half.n : 40, 0)} serves halve the width; the
       <em>next</em> halving takes four times as many again, and the one after
       that sixteen. <strong>Precision about an average is cheap, and it stays
-      cheap forever.</strong> It just stops being worth much.
-      <span class="aside">The dashed reference is the law behind that: width
+      cheap forever.</strong>
+      <span class="aside detail">It just stops being worth much.
+      The dashed reference is the law behind that: width
       falls as one over the square root of the data, so to halve it you quadruple
       the serves. Measured across the populations in the bar above, the constant
-      lands near 2.18 every time and the final width near
-      ${fmt(last.summary.sd, 3)} — by then it is set by how varied the serve
-      difficulties are, not by anything about the players.
-      ${refTo('team-sweep', { cap: true })} takes this to a thousand serves each
-      and asks which beliefs keep sharpening and which ones stop.</span>`
+      lands near 2.18 every time<span class="detail">, and the final width near
+      ${fmt(last.summary.sd, 3)}</span> — by then it is set by how varied the serve
+      difficulties are, not by anything about the players.</span>
+      <!-- Hoisted OUT of the aside deliberately. The asides collapse under the
+           Detail toggle, and a forward reference is how the reader gets to the
+           next step of the argument -- losing every cross-reference with the
+           numbers would leave the sections with no thread between them. Kept
+           short for the same reason the rest of this was cut. -->
+      <span class="aside">${refTo('team-sweep', { cap: true })} takes this to a
+      thousand serves each.</span>`
   }
 
   function render () {
@@ -588,16 +633,20 @@ export function completePooling () {
     const first = frames[1]
     const last = frames[frames.length - 1]
     el.querySelector('[data-role="takeaway"]').innerHTML = `
-      After one serve the team's shared belief was ${fmt(first.summary.sd)} wide.
-      After ${fmt(last.n, 0)} it is ${fmt(last.summary.sd)} —
-      ${fmt(first.summary.sd / last.summary.sd, 1)}× narrower.
+      The belief began as wide as the prior and ended as a spike.
+      <span class="detail">After one serve it was ${fmt(first.summary.sd)} wide;
+      after ${fmt(last.n, 0)} it is ${fmt(last.summary.sd)},
+      ${fmt(first.summary.sd / last.summary.sd, 1)}× narrower.</span>
       <strong>No step in that loop was different from any other.</strong> The same
-      multiplication ran ${fmt(last.n, 0)} times.
-      <span class="aside">This is the exact posterior for complete pooling on a
+      multiplication ran at every serve.
+      <span class="aside detail">This is the exact posterior for complete pooling on a
       1025-point grid over θ ∈ [−8, 8], computed in the browser from the serves in
       the scenario file — not a re-fit, which is why it lands on the number the
-      site ships rather than near it. ${refTo('no-pooling', { cap: true })} runs
-      the identical loop over one player's serves instead of all of them.</span>`
+      site ships rather than near it.</span>
+      <!-- Hoisted out of the aside: see the note in renderWidth(). The thread to
+           the next section survives the toggle; the provenance above does not. -->
+      <span class="aside">${refTo('no-pooling', { cap: true })} runs the identical
+      loop over one player's serves instead of all of them.</span>`
   }
 
   function mount () {

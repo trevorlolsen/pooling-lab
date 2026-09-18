@@ -138,45 +138,45 @@ export function theTeam () {
     // swapping teams changes forty dots subtly and reads as "nothing happened".
     const s1 = skillLabel(1)
     const s2 = skillLabel(2)
-    // The rings are the population's own truth -- fixed for a preset, so they
-    // hold still when the team changes and only the dots move. Say so, or a
-    // reader reasonably takes the inner ring for something about this team.
+    // The caption names the marks and stops. Everything a narrator would say
+    // over the top of it -- that the rings are the population's own truth and so
+    // hold still when the team changes, why the 1D dots are in rows, which
+    // ladder the dot sizes encode -- sits in the detail run, because on a
+    // presentation surface it competes with the speaker.
+    //
     // The 2D chart has no rows to carry the information bands, so it carries
-    // them in the dot size instead; the sentence quotes the bands actually
-    // simulated rather than a typed-in ladder.
-    const sizes = `Bigger dots were watched more: ${bands.join(', ')} ${unit} each.`
-    const select = 'Click a player to follow them through the story; the black ring marks your choice.'
+    // them in the dot size instead. The visible clause names the encoding; the
+    // ladder itself is already in the lede, so the detail run quotes the bands
+    // actually simulated rather than a typed-in ladder.
+    const sizes = `, bigger for more ${unit}<span class="detail"> — ${bands.join(', ')} ${unit} each</span>`
+    const select = 'Click one to follow them<span class="detail"> through the story; the black ring marks your choice</span>.'
+    const axes = `${s1} left to right, ${s2} bottom to top.`
+    const dots2d = `Dots are the ${players.length} players${sizes}<span class="detail">, each at their true ability in both skills</span>.`
+    const rowsDetail = '<span class="detail">, in rows by how often we watched them</span>'
+    const stayPut = (what) =>
+      `<span class="detail"> — ${what}, not this team, so they stay put when you switch teams</span>`
     const base = twoD
       ? (groupsHidden
-          ? `${s1} runs left to right and ${s2} bottom to top. With the groups hidden,
-             the grey shape is the whole population: the inner ring encloses 50% of it
-             and the outer ring 90% — the population itself, not this team, so they
-             stay put when you switch teams. Dots are the ${players.length} players
-             actually drawn, each at their true ability in both skills, in grey while
-             their groups are hidden. ${sizes}`
+          ? `${axes} Groups hidden: grey rings, 50% and 90% of the
+             population${stayPut('the population itself')}. ${dots2d}`
           : grouped
-            ? `${s1} runs left to right and ${s2} bottom to top. Around each group's true
-             mean, the inner ring encloses 50% of that group's players and the outer
-             ring 90% — the population the group is drawn from, not this team, so they
-             stay put when you switch teams. The dashed outline is 90% of the whole
-             population. Dots are the ${players.length} players actually drawn, each at
-             their true ability in both skills. ${sizes}`
-            : `${s1} runs left to right and ${s2} bottom to top. The inner ring encloses
-             50% of the population and the outer ring 90% — the population itself, so
-             they stay put when you switch teams. Dots are the ${players.length} players
-             actually drawn, each at their true ability in both skills. ${sizes}`)
+            ? `${axes} Rings: 50% and 90% of each group; dashed, the
+             population${stayPut('the population each group is drawn from')}. ${dots2d}`
+            : `${axes} Rings: 50% and 90% of the
+             population${stayPut('the population itself')}. ${dots2d}`)
       : groupsHidden
-        ? `With the groups hidden, the grey shape is the whole population — the one you
-           would actually sample from. Dots are the ${players.length} players drawn, in
-           rows by how often we watched them, in grey while their groups are hidden.`
+        ? `With the groups hidden, the grey shape is the whole population.
+           <span class="detail">It is the one you would actually sample from.</span>
+           Dots are the ${players.length} players drawn<span class="detail">, in grey,
+           in rows by how often we watched them</span>.`
         : grouped
-          ? `Each group is shaded in its own colour and the two stack up to the dark
-           outline, which is the population you would actually sample from. Dots are
-           the ${players.length} players drawn, in rows by how often we watched them.`
+          ? `Each group is shaded in its own colour; the dark outline is the population
+           you would sample from.<span class="detail"> It is the two groups stacked
+           up.</span> Dots are the ${players.length} players drawn${rowsDetail}.`
           : `Shaded: the population you would sample from. Dots are the
-           ${players.length} players drawn, in rows by how often we watched them.`
+           ${players.length} players drawn${rowsDetail}.`
     el.querySelector('[data-role="caption"]').innerHTML =
-      `<strong>${teamLabel()}</strong> — ${base} ${select} Every team is a fresh draw from the same population.`
+      `<strong>${teamLabel()}</strong> — ${base} ${select}<span class="detail"> Every team is a fresh draw from the same population.</span>`
 
     el.querySelector('[data-role="takeaway"]').innerHTML = twoD
       ? takeaway2d(pop, groups, bimodal, s1, s2)
@@ -289,74 +289,94 @@ export function theTeam () {
         <li><strong>What the model is told.</strong> ${labelStep}</li>
       </ol>
       ${table}
-      <p class="aside">On the ability scale θ, a serve at difficulty d = 0 is returned with
+      <span class="aside detail">On the ability scale θ, a serve at difficulty d = 0 is returned with
          probability logit<sup>−1</sup>(θ); θ = 0 is a coin flip, θ = ±1 is about ${
            (100 / (1 + Math.exp(-1))).toFixed(0)}% either way. The difficulty range
-         ${dLo} to ${dHi} is shared by every population.</p>`
-  }
-
-  function takeaway1d (pop, groups) {
-    const spread = pop.separation_ratio
-    return pop.bimodal
-      ? `The two groups sit <strong class="figures">${pop.mean_separation.toFixed(1)}</strong>
-         apart on the ability scale while players within a group vary by only
-         <strong class="figures">${pop.within_sd.toFixed(2)}</strong> — a ratio of
-         <strong class="figures">${spread.toFixed(1)}</strong>. The population has
-         two humps, and <strong>its average describes nobody.</strong> Hold on to that.`
-      : groups.length > 1
-        ? `The group means differ by only
-           <strong class="figures">${pop.mean_separation.toFixed(1)}</strong> while players
-           within a group vary by <strong class="figures">${pop.within_sd.toFixed(2)}</strong>.
-           The label exists, but it is <strong>barely worth knowing</strong>.`
-        : `Every player is drawn from one normal population. There is no group
-           label to use, and <strong>nothing to condition on</strong> — which makes
-           this the cleanest place to see what pooling does on its own.`
+         ${dLo} to ${dHi} is shared by every population.</span>`
   }
 
   /**
-   * Two skills: quote the separation in each, then the fact the 2D view is
-   * really about -- the within-group correlation, and how the group structure
-   * inflates it when you look at the whole population at once.
+   * One skill: the claim and its punchline, and nothing else on screen.
+   *
+   * Which figure stays visible is not a style choice. `distinct` and
+   * `tight_groups` share their group means, so only the RATIO tells them apart
+   * and the ratio has to stay out front; `same_mean` and `overlapping` share
+   * their within-group sd, so there it is the SEPARATION that has to. The other
+   * of the pair, and the ability-scale gloss, go behind the Detail toggle.
+   */
+  function takeaway1d (pop, groups) {
+    const spread = pop.separation_ratio
+    return pop.bimodal
+      ? `The gap between the two groups is far wider than the spread inside either one —
+         a ratio of <strong class="figures">${spread.toFixed(1)}</strong>.
+         <span class="detail">The means sit ${pop.mean_separation.toFixed(1)} apart on the
+         ability scale while players within a group vary by only
+         ${pop.within_sd.toFixed(2)}.</span> Two humps, and
+         <strong>the average describes nobody.</strong>`
+      : groups.length > 1
+        ? `The two groups sit almost on top of each other — their means differ by only
+           <strong class="figures">${pop.mean_separation.toFixed(1)}</strong>.
+           <span class="detail">That is no further apart than the players inside a single
+           group are spread: within a group, players vary by
+           ${pop.within_sd.toFixed(2)}.</span>
+           The label exists, but it is <strong>barely worth knowing</strong>.`
+        : `Every player is drawn from one normal population. There is no group
+           label to use, and <strong>nothing to condition on</strong><span class="detail">
+           — which makes this the cleanest place to see what pooling does on its
+           own</span>.`
+  }
+
+  /**
+   * Two skills: the claim, its punchline, and the pair of correlations the 2D
+   * view is really about. Everything else is behind the Detail toggle.
+   *
+   * Three figures have to stay visible because they are what moves when the
+   * reader switches population: the RATIOS in the bimodal branch (`distinct`
+   * and `tight_groups` share their group means, so the ratio is all that
+   * separates them), the SEPARATIONS in the overlapping branch (`same_mean` and
+   * `overlapping` share their within-group sd, so the separation is), and the
+   * marginal ρ, which climbs with the group structure. The raw separations,
+   * within-group sds and the explanation of the inflated ρ sit in the detail
+   * run.
    */
   function takeaway2d (pop, groups, bimodal, s1, s2) {
     const rho = pop.rho
     const rhoM = pop.rho_marginal
-    const correlation = `The two skills are correlated at
-      <strong class="figures">ρ = ${rho.toFixed(2)}</strong> within a group; across the
-      whole population that looks like
-      <strong class="figures">${rhoM.toFixed(2)}</strong>${
-        groups.length > 1 && Math.abs(rhoM - rho) > 0.05
-          ? ', because players who are strong in one skill tend to be in the group that is strong in both'
-          : ''}.`
+    const why = groups.length > 1 && Math.abs(rhoM - rho) > 0.05
+      ? '<span class="detail">, because players who are strong in one skill tend to be in the group that is strong in both</span>'
+      : ''
+    const correlation = `The skills correlate:
+      <strong class="figures">ρ = ${rho.toFixed(2)}</strong> within a group,
+      <strong class="figures">${rhoM.toFixed(2)}</strong> across the population${why}.`
     if (bimodal) {
-      return `The two groups sit <strong class="figures">${pop.mean_separation[0].toFixed(1)}</strong>
-         apart in ${s1} and <strong class="figures">${pop.mean_separation[1].toFixed(1)}</strong>
-         in ${s2}, while players within a group vary by only
-         <strong class="figures">${pop.within_sd[0].toFixed(2)}</strong> and
-         <strong class="figures">${pop.within_sd[1].toFixed(2)}</strong> — ratios of
-         <strong class="figures">${pop.separation_ratio[0].toFixed(1)}</strong> and
-         <strong class="figures">${pop.separation_ratio[1].toFixed(1)}</strong>.
-         The population has two islands, and <strong>its average sits in the water
-         between them.</strong> ${correlation}`
+      return `The groups are pulled apart by
+         <strong class="figures">${pop.separation_ratio[0].toFixed(1)}</strong>× the spread
+         inside them in ${s1},
+         <strong class="figures">${pop.separation_ratio[1].toFixed(1)}</strong>× in ${s2}.
+         <span class="detail">The group means sit ${pop.mean_separation[0].toFixed(1)} apart
+         in ${s1} and ${pop.mean_separation[1].toFixed(1)} in ${s2}, while players within a
+         group vary by only ${pop.within_sd[0].toFixed(2)} and
+         ${pop.within_sd[1].toFixed(2)}.</span>
+         Two islands, and <strong>the average sits in the water.</strong> ${correlation}`
     }
     if (groups.length > 1) {
-      return `The group means differ by only
-         <strong class="figures">${pop.mean_separation[0].toFixed(1)}</strong> in ${s1} and
-         <strong class="figures">${pop.mean_separation[1].toFixed(1)}</strong> in ${s2}, while
-         players within a group vary by
-         <strong class="figures">${pop.within_sd[0].toFixed(2)}</strong> and
-         <strong class="figures">${pop.within_sd[1].toFixed(2)}</strong> — ratios of
-         <strong class="figures">${pop.separation_ratio[0].toFixed(1)}</strong> and
-         <strong class="figures">${pop.separation_ratio[1].toFixed(1)}</strong>.
+      return `The two clouds overlap: their means differ by only
+         <strong class="figures">${pop.mean_separation[0].toFixed(1)}</strong> in ${s1},
+         <strong class="figures">${pop.mean_separation[1].toFixed(1)}</strong> in ${s2}.
+         <span class="detail">That is no further apart than the players inside a single
+         group are spread: within a group, players vary by
+         ${pop.within_sd[0].toFixed(2)} and ${pop.within_sd[1].toFixed(2)} — ratios of
+         ${pop.separation_ratio[0].toFixed(1)} and
+         ${pop.separation_ratio[1].toFixed(1)}.</span>
          The label exists, but it is <strong>barely worth knowing</strong>. ${correlation}`
     }
     // One group: the within-group and marginal correlations coincide, so
     // quoting both would be a distinction without a difference.
     return `Every player is drawn from one bivariate normal population. There is no
        group label to use, and <strong>nothing to condition on</strong> — but the two
-       skills are not independent: they are correlated at
-       <strong class="figures">ρ = ${rho.toFixed(2)}</strong>, so a player who is strong
-       in ${s1} tends to be strong in ${s2} too.`
+       skills correlate at <strong class="figures">ρ = ${rho.toFixed(2)}</strong>.
+       <span class="detail">A player who is strong in ${s1} tends to be strong in
+       ${s2} too.</span>`
   }
 
   function mount () {

@@ -138,23 +138,35 @@ export function convergence () {
     const end = steps.find((s) => s.n_keep === last)
     if (!start || !end) return
 
-    el.querySelector('[data-role="caption"]').textContent =
-      `${payload.focal.length} players, each swept from ${first} to ${last} serves ` +
-      `while the other ${payload.n_players - payload.focal.length} players keep all of theirs. ` +
-      `The datasets are nested, so every step adds serves to the same player. ` +
-      `The dashed grey line is the estimated population mean μ; it shifts a little as this player's data changes the team fit. ` +
-      `Always on the ability scale; the Scale and Show controls do not apply here.`
+    // Visible: one sentence naming the panels and the axes, one naming the grey
+    // line. The log scaling, the nesting, the held-fixed team and the control
+    // caveat are all method, not marks, so they sit behind the Detail toggle
+    // with the measured numbers.
+    el.querySelector('[data-role="caption"]').innerHTML =
+      'One panel per player: across the bottom, how many of that player\'s own serves the model ' +
+      'has seen; up the side, latent ability. The dashed grey line is the estimated population mean μ. ' +
+      '<span class="detail">The bottom axis is log-scaled, because nearly all of the movement ' +
+      'happens in the first handful of serves. </span>' +
+      `<span class="detail">${payload.focal.length} players, each swept from ${first} to ${last} serves, ` +
+      `while the other ${payload.n_players - payload.focal.length} keep all of theirs. </span>` +
+      '<span class="detail">The rest of the team is held fixed the whole way across, and the ' +
+      'datasets are nested, so every step adds serves to the same player. μ shifts a little as ' +
+      'this player\'s data changes the team fit. Always on the ability scale; the Scale and Show ' +
+      'controls do not apply here.</span>'
 
     el.querySelector('[data-role="takeaway"]').innerHTML = `
-      On one serve, player <strong class="figures">${lead.focal_id}</strong>'s own data
-      put them at <strong class="figures">${start.no_pool_mean.toFixed(2)}</strong> —
-      with an uncertainty of <strong class="figures">${start.no_pool_sd.toFixed(2)}</strong>,
-      which is to say it knew nothing. The model overruled it almost entirely,
-      moving the estimate <strong class="figures">${Math.abs(start.shrinkage).toFixed(2)}</strong>
-      toward the team. By <strong class="figures">${last}</strong> serves that same
-      player's own data is ${(start.no_pool_sd / end.no_pool_sd).toFixed(1)}× sharper
-      and the model moves them just
-      <strong class="figures">${Math.abs(end.shrinkage).toFixed(2)}</strong>.
+      Follow player <strong class="figures">${lead.focal_id}</strong>, the one the model
+      overruled hardest: at the left edge it all but ignores their own data, and at the
+      right it barely moves them.
+      <span class="detail">At the far left a single serve buys an orange band wide enough to
+      fill much of the panel, and the model sets them down beside the dashed team mean instead:
+      their own serves put them at ${start.no_pool_mean.toFixed(2)},
+      with an uncertainty of ${start.no_pool_sd.toFixed(2)}, and the model moved the
+      estimate ${Math.abs(start.shrinkage).toFixed(2)} toward the team. </span>
+      <span class="detail">Read rightward and the orange track tightens into a claim worth
+      listening to while the blue one stops leaving it: by ${last} serves that same player's own data is
+      ${(start.no_pool_sd / end.no_pool_sd).toFixed(1)}× sharper and the model moves
+      them just ${Math.abs(end.shrinkage).toFixed(2)}. </span>
       <strong>Same person, same true ability. Only the evidence changed.</strong>`
 
     // Own-data uncertainty, unlike the pull, really is monotone -- it is the
@@ -174,14 +186,20 @@ export function convergence () {
     const minNarrow = Math.min(...narrowing)
     const minPull = Math.min(...pulls)
 
+    // The aside stays on screen on purpose. The convention is that the prose
+    // admits it when a pattern is noisy, and the monotone sentence above it is
+    // the thing that admission contrasts against, so both survive the Detail
+    // pass even though they cost this takeaway its character budget.
     el.querySelector('[data-role="pull-takeaway"]').innerHTML = `
-      Across all ${payload.focal.length} players the pull collapses by at least
-      <strong class="figures">${minPull.toFixed(0)}×</strong> between
-      ${first} and ${last} serves, while their own-data uncertainty narrows by at
-      least <strong class="figures">${minNarrow.toFixed(1)}×</strong>.
+      Every line starts high and ends on the floor: by the right-hand edge the model
+      barely moves anyone off their own data. Their own-data uncertainty, unlike the
+      pull, narrows monotonically.
+      <span class="detail">Across all ${payload.focal.length} players the pull collapses
+      by at least ${minPull.toFixed(0)}× between ${first} and ${last} serves, while their
+      own-data uncertainty narrows by at least ${minNarrow.toFixed(1)}×. </span>
       <strong>Nothing told the model to ease off</strong> — a wide posterior gets
-      overruled, a narrow one does not, and watching someone longer is what
-      narrows it.
+      overruled, a narrow one does not.<span class="detail"> Watching someone longer is
+      what narrows it.</span>
       <span class="aside">The path between is deliberately not smoothed. The pull
       depends on where a player's own noisy estimate happens to land at each step,
       so it wanders on the way down rather than falling cleanly — the trend is
@@ -218,37 +236,54 @@ export function convergence () {
     if (!s1.start || !s1.end || !s2.start || !s2.end) return
     const leadArea = { start: areaAt(lead, first), end: areaAt(lead, last) }
 
-    el.querySelector('[data-role="caption"]').textContent =
-      `${payload.focal.length} players, each swept from ${first} to ${last} plays in both skills ` +
-      `while the other ${payload.n_players - payload.focal.length} players keep all of theirs. ` +
-      `The datasets are nested, so every step adds plays to the same player. ` +
-      `Each ring is the 50% region of that model's posterior; the axes are the same in every cell. ` +
-      `The grey dot is the estimated population mean μ; it shifts a little as this player's data changes the team fit. ` +
-      `Always on the ability scale; the Scale and Show controls do not apply here.`
+    // Same rule as the 1D caption: the grid and the marks stay, the method —
+    // what the axes are, why the cells are comparable, the nesting, the held
+    // -fixed team, the control caveat — goes behind the Detail toggle.
+    el.querySelector('[data-role="caption"]').innerHTML =
+      'A row per player, a column per observation count. Each cell is the skill plane; ' +
+      'each ring is the 50% region of a model\'s posterior, and the grey dot is the estimated ' +
+      'population mean μ. ' +
+      '<span class="detail">One skill on each axis, and reading left to right walks one player ' +
+      'through being watched longer. The axes are the same in every cell, so a ring that looks ' +
+      'smaller is smaller. </span>' +
+      `<span class="detail">${payload.focal.length} players, each swept from ${first} to ${last} plays ` +
+      `in both skills, while the other ${payload.n_players - payload.focal.length} keep all of theirs. </span>` +
+      '<span class="detail">The rest of the team is held fixed the whole way across, and the ' +
+      'datasets are nested, so every step adds plays to the same player. μ shifts a little as ' +
+      'this player\'s data changes the team fit. Always on the ability scale; the Scale and Show ' +
+      'controls do not apply here.</span>'
+
+    const areaClause = leadArea.start && leadArea.end
+      ? `, and the 50% region of their own-data posterior has shrunk from
+         ${leadArea.start.toFixed(2)} to ${leadArea.end.toFixed(3)} square units of the
+         plane, ${(leadArea.start / leadArea.end).toFixed(0)}× smaller`
+      : ''
 
     el.querySelector('[data-role="takeaway"]').innerHTML = `
-      On one play, player <strong class="figures">${lead.focal_id}</strong>'s own data
-      put their ${labels[0]} at <strong class="figures">${s1.start.no_pool_mean.toFixed(2)}</strong>
-      and their ${labels[1]} at <strong class="figures">${s2.start.no_pool_mean.toFixed(2)}</strong>,
-      with uncertainties of <strong class="figures">${s1.start.no_pool_sd.toFixed(2)}</strong> and
-      <strong class="figures">${s2.start.no_pool_sd.toFixed(2)}</strong> —
-      which is to say it knew nothing. The model overruled it almost entirely, moving the
-      estimate <strong class="figures">${Math.abs(s1.start.shrinkage).toFixed(2)}</strong> in
-      ${labels[0]} and <strong class="figures">${Math.abs(s2.start.shrinkage).toFixed(2)}</strong>
-      in ${labels[1]} toward the team. By <strong class="figures">${last}</strong> plays the
-      model moves them just <strong class="figures">${Math.abs(s1.end.shrinkage).toFixed(2)}</strong>
-      and <strong class="figures">${Math.abs(s2.end.shrinkage).toFixed(2)}</strong>${
-        leadArea.start && leadArea.end
-          ? `, and the 50% region of their own-data posterior has shrunk from
-             <strong class="figures">${leadArea.start.toFixed(2)}</strong> to
-             <strong class="figures">${leadArea.end.toFixed(3)}</strong> square units of the plane —
-             <strong class="figures">${(leadArea.start / leadArea.end).toFixed(0)}×</strong> smaller`
-          : ''}.
+      Follow player <strong class="figures">${lead.focal_id}</strong>, the one the model
+      overruled hardest: in the leftmost cell it all but ignores their own data; by the
+      rightmost it barely moves them.
+      <span class="detail">The ranking is by ${labels[0]} on their opening play. At the left
+      their own-data ring fills very nearly the whole cell — one play says nothing about either
+      skill — so the model parks them next to the grey
+      population dot. Their own data put their ${labels[0]} at
+      ${s1.start.no_pool_mean.toFixed(2)} and their ${labels[1]} at
+      ${s2.start.no_pool_mean.toFixed(2)}, with uncertainties of
+      ${s1.start.no_pool_sd.toFixed(2)} and ${s2.start.no_pool_sd.toFixed(2)}, and the model
+      moved the estimate ${Math.abs(s1.start.shrinkage).toFixed(2)} in ${labels[0]} and
+      ${Math.abs(s2.start.shrinkage).toFixed(2)} in ${labels[1]} toward the team. </span>
+      <span class="detail">Walk the row rightward and that ring closes onto the truth while the
+      blue ellipse stops leaning toward the dot — the borrowed information being handed back, a
+      few plays at a time. By ${last} plays the model moves them just
+      ${Math.abs(s1.end.shrinkage).toFixed(2)} and
+      ${Math.abs(s2.end.shrinkage).toFixed(2)}${areaClause}. </span>
       <strong>Same person, same true abilities. Only the evidence changed.</strong>`
 
-    el.querySelector('[data-role="pull-caption"]').textContent =
+    // innerHTML, not textContent: this caption carries a `.detail` span, and a
+    // textContent assignment would put the tag on screen as literal characters.
+    el.querySelector('[data-role="pull-caption"]').innerHTML =
       'Two lines per player: orange dashed is how much of the plane their own-data posterior still covers, blue is partial pooling\'s. ' +
-      'The gap between them is the information the model borrowed, and it closes as the player is watched longer.'
+      '<span class="detail">The gap between them is the information the model borrowed, and it closes as the player is watched longer.</span>'
 
     // The pull per skill, and the area, both from first to last step.
     const collapse = (k) => Math.min(...payload.focal.map((f) => {
@@ -262,16 +297,21 @@ export function convergence () {
       return a && b ? a / b : 1
     }))
 
+    // As in 1D, the aside is exempt from the Detail pass: the noise admission
+    // stays on screen, and the clause about the own-data patch shrinking the
+    // whole way is what it contrasts against.
     el.querySelector('[data-role="pull-takeaway"]').innerHTML = `
-      Across all ${payload.focal.length} players the pull collapses by at least
-      <strong class="figures">${collapse(0).toFixed(0)}×</strong> in ${labels[0]} and
-      <strong class="figures">${collapse(1).toFixed(0)}×</strong> in ${labels[1]} between
-      ${first} and ${last} plays, while the 50% region of their own-data posterior
-      shrinks to at least <strong class="figures">1/${areaCollapse.toFixed(0)}</strong>
-      of its starting area.
+      The orange and blue lines start far apart and end on top of each other, in both
+      ${labels[0]} and ${labels[1]}: the pull collapses.
+      <span class="detail">The patch of the plane their own data still leaves open shrinks
+      the whole way across. Across all ${payload.focal.length} players the pull collapses by
+      at least ${collapse(0).toFixed(0)}× in ${labels[0]} and ${collapse(1).toFixed(0)}× in
+      ${labels[1]} between ${first} and ${last} plays, while the 50% region of their
+      own-data posterior shrinks to at least 1/${areaCollapse.toFixed(0)} of its starting
+      area. </span>
       <strong>Nothing told the model to ease off</strong> — a wide posterior gets
-      overruled, a narrow one does not, and watching someone longer is what
-      narrows it.
+      overruled, a narrow one does not.<span class="detail"> Watching someone longer is
+      what narrows it.</span>
       <span class="aside">The path between is deliberately not smoothed. The pull
       depends on where a player's own noisy estimate happens to land at each step,
       so it wanders on the way down rather than falling cleanly — the trend is

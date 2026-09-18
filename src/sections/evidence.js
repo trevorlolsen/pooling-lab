@@ -26,10 +26,10 @@ export function evidence () {
       <header>
         <p class="eyebrow">${numberOf('evidence')} — Did it help?</p>
         <h2 data-role="headline">Shrinkage is a mechanism. Was it an improvement?</h2>
-        <p>Moving an estimate is not the same as improving it. Because we
-           simulated this population, we know every player's true ability — so we
-           can simply score each model against it, and against serves it was
-           never shown.</p>
+        <p>Moving an estimate is not the same as improving it. We score each
+           model against the truth, and against serves it was never shown.<span
+           class="detail"> Because we simulated this population, we know every
+           player's true ability.</span></p>
       </header>
 
       <div class="controls" data-role="controls">
@@ -37,7 +37,7 @@ export function evidence () {
           <button data-metric="mae" aria-pressed="true">Mean absolute error</button>
           <button data-metric="rmse" aria-pressed="false">RMSE</button>
         </span>
-        <span class="control-note">Lower is better. Click a model below to hide it — the axis rescales, which is how you see past complete pooling.</span>
+        <span class="control-note">Lower is better.<span class="detail"> Click a model below to hide it — the axis rescales, which is how you see past complete pooling.</span></span>
       </div>
 
       <figure class="chart-panel">
@@ -48,14 +48,15 @@ export function evidence () {
       <p class="takeaway" data-role="takeaway"></p>
 
       <h3 class="subhead">Prediction on serves the model never saw</h3>
-      <p>Truth-scoring uses knowledge only a simulator has. Holdout scoring does
-         not: every player has twenty further serves that were generated at the
-         same time and never passed to Stan. Root likelihood is the geometric
-         mean probability the model assigned to what actually happened — higher
-         is better, and 0.5 is a coin flip.</p>
+      <p>Every player has twenty further serves the model never saw. Root
+         likelihood is how well it predicted them — higher is better, and 0.5 is
+         a coin flip.<span class="detail"> Truth-scoring uses knowledge only a
+         simulator has; holdout scoring does not — those serves were generated at
+         the same time and never passed to Stan. Root likelihood is the geometric
+         mean probability the model assigned to what actually happened.</span></p>
       <figure class="chart-panel">
         <div data-role="rlh"></div>
-        <figcaption>In-sample uses the training serves the model was fitted on. Out-of-sample uses the untouched holdout. Averaged over all five teams.</figcaption>
+        <figcaption>In-sample is the serves the model was fitted on; out-of-sample is the untouched holdout.<span class="detail"> Averaged over all five teams.</span></figcaption>
       </figure>
       <p class="takeaway" data-role="rlh-takeaway"></p>
     </div>`
@@ -143,14 +144,24 @@ export function evidence () {
       width: chart.clientWidth || 760
     }))
 
-    el.querySelector('[data-role="caption"]').textContent =
-      `${list.length} teams, ${arms.length} models${twoD ? ', one panel per skill' : ''}, ` +
-      `scored at each count of training ${unit} per player. ` +
-      'The line is the mean across teams; ' +
-      `the shaded band is the full range, so its width is how much a single team's answer can move. ` +
+    // Visibly, the caption only names the marks: what the axes carry, and that
+    // the line is a mean and the band a range. Everything that explains rather
+    // than names -- the team and model counts, what the left edge and the band's
+    // width imply, why the scrambled arm borrows the correct arm's colour -- goes
+    // behind the rail's Detail toggle. The scoreboard figures that settle the
+    // comparison stay visible in the takeaway below.
+    el.querySelector('[data-role="caption"]').innerHTML =
+      `<span class="detail">${list.length} teams, ${arms.length} models. </span>` +
+      `How far each model's estimates sit from the abilities we simulated from` +
+      `${twoD ? ', one panel per skill' : ''}. ` +
+      `Left to right is training ${unit} per player; ` +
+      'the line is the mean across teams, the band their range.' +
+      `<span class="detail"> The left edge is the thinly-observed end, and the band's ` +
+      `width is how much a single team's answer can move.` +
       (arms.some(isDashedArm)
-        ? 'The scrambled covariate shares the correct covariate\'s colour and is drawn dashed with open dots.'
-        : '')
+        ? ' The scrambled covariate shares the correct covariate\'s colour and is drawn dashed with open dots.'
+        : '') +
+      '</span>'
 
     renderTakeaway(rows, arms, unit)
     // The table and the takeaway stay complete when a model is hidden. The
@@ -161,8 +172,8 @@ export function evidence () {
 
   /**
    * The three comparisons, computed over one set of rows. In 2D the first
-   * skill's rows carry the full sentences and the second skill's are reduced
-   * to their numbers.
+   * skill's rows carry the verdicts in prose and the second skill's verdicts
+   * are stated beside them, with both skills' figures behind the Detail toggle.
    */
   function comparisons (rows) {
     const mean = (armId, band) => {
@@ -190,24 +201,32 @@ export function evidence () {
     const c = comparisons(lead)
 
     const parts = []
+    // This is the section whose job is to report a comparison, so each verdict
+    // keeps the one figure that settles it -- and nothing else. The supporting
+    // walk-downs (the second reading of the same comparison at the far end of
+    // the ladder, the per-arm values the reader can lift straight off the chart)
+    // go behind the Detail toggle.
     if (c.pooling) {
       const { gainLo, gainHi } = c.pooling
       parts.push(`${twoD ? `In ${skillLabel(1)}, at` : 'At'} <strong class="figures">${c.lo}</strong> ${unit} per player, partial pooling beats
-        no pooling by <strong class="figures">${gainLo.toFixed(4)}</strong>. At
-        <strong class="figures">${c.hi}</strong> the gap is
-        <strong class="figures">${gainHi.toFixed(4)}</strong>${
-          gainHi < gainLo * 0.5 ? ' — the advantage is concentrated where data is thin' : ''}.`)
+        no pooling by <strong class="figures">${gainLo.toFixed(4)}</strong>.
+        <span class="detail">At <strong class="figures">${c.hi}</strong> the gap is
+        <strong class="figures">${gainHi.toFixed(4)}</strong>.${
+          gainHi < gainLo * 0.5
+            ? ' By the far end of the ladder most of that edge is gone — the advantage is concentrated where data is thin.'
+            : ''}</span>`)
     }
     if (c.correct != null) {
       parts.push(c.correct > 0
-        ? `The <strong>correct covariate</strong> improves on plain partial pooling by
-           <strong class="figures">${c.correct.toFixed(4)}</strong> overall.`
-        : `The correct covariate did <strong>not</strong> improve on plain partial pooling here.`)
+        ? `The <strong>correct covariate</strong> gains
+           <strong class="figures">${c.correct.toFixed(4)}</strong> on plain partial pooling.`
+        : `The correct covariate did <strong>not</strong> beat plain partial pooling.`)
     }
     if (c.wrong != null) {
-      parts.push(`The <strong>scrambled covariate</strong> lands within
-        <strong class="figures">${c.wrong.toFixed(4)}</strong> of using no covariate at all —
-        it costs nothing and buys nothing.`)
+      parts.push(`The <strong>scrambled covariate</strong> lands on the
+        no-covariate line<span class="detail">, within
+        <strong class="figures">${c.wrong.toFixed(4)}</strong> of it overall</span> —
+        it buys nothing.`)
     }
 
     if (twoD) {
@@ -228,7 +247,20 @@ export function evidence () {
         bits.push(`the scrambled covariate lands within
           <strong class="figures">${second.wrong.toFixed(4)}</strong> of no covariate`)
       }
-      if (bits.length) parts.push(`The same in ${skillLabel(2)}: ${bits.join('; ')}.`)
+      if (bits.length) {
+        // The verdict for the second skill stays in words -- it can differ from
+        // the first skill's, and that difference is the reason for two panels.
+        // With no covariate to judge there is no verdict, so the visible line
+        // falls back to naming the panel.
+        const verdict = second.correct == null
+          ? `The second panel is ${skillLabel(2)}.`
+          : `In ${skillLabel(2)}, the correct covariate
+             <strong>${second.correct > 0 ? 'does' : 'does not'}</strong> improve on plain
+             partial pooling.`
+        parts.push(`${verdict}
+          <span class="detail">Scored the same way over the same teams.
+          In ${skillLabel(2)}: ${bits.join('; ')}.</span>`)
+      }
     }
     el.querySelector('[data-role="takeaway"]').innerHTML = parts.join(' ')
   }
@@ -308,13 +340,22 @@ export function evidence () {
 
     const best = totals.find((r) => r.outSample === bestOut)
     const noPool = totals.find((r) => /no pooling/i.test(r.label))
+    // Two verdicts, each keeping the one figure that settles it: who wins on
+    // held-out data, and how far no pooling flatters itself. Both figures stay
+    // visible -- the winner's score alone can tie between populations, and the
+    // Gap is what tells them apart. What goes behind the Detail toggle is the
+    // pointer to the highlighted row, the pair of cells the gap is computed
+    // from, and the gloss on what the gap means.
     el.querySelector('[data-role="rlh-takeaway"]').innerHTML = `
-      <strong>${best.label}</strong> predicts unseen ${twoD ? 'plays, across both skills,' : 'serves'} best, at
-      <strong class="figures">${best.outSample.toFixed(4)}</strong>.
-      ${noPool ? `No pooling looks better in-sample than out
+      <strong>${best.label}</strong> predicts unseen ${twoD ? 'plays' : 'serves'} best, at
+      <strong class="figures">${best.outSample.toFixed(4)}</strong>.<span class="detail"> ${
+        twoD ? 'Across both skills; that is' : 'That is'} the highlighted row above.</span>
+      ${noPool ? `The <strong>Gap</strong> column: no pooling scores
+        <strong class="figures">${(noPool.inSample - noPool.outSample).toFixed(4)}</strong> better on the
+        ${twoD ? 'plays' : 'serves'} it trained on than on ones it never saw<span class="detail">
         (<span class="figures">${noPool.inSample.toFixed(4)}</span> against
          <span class="figures">${noPool.outSample.toFixed(4)}</span>) — it is fitting
-        noise it cannot reproduce. <strong>That gap is what pooling is buying.</strong>` : ''}`
+        noise it cannot reproduce</span>. <strong>That gap is what pooling is buying.</strong>` : ''}`
   }
 
   function mount () {

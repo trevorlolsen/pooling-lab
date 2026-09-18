@@ -108,8 +108,39 @@ await settle(400)
 // itself and pass or fail for the wrong reason.
 const chartSvg = (id) => document.getElementById(id)?.querySelector('[data-role="chart"] svg')
 const snap = (id) => chartSvg(id)?.outerHTML ?? ''
-const takeaway = (id) =>
-  document.getElementById(id).querySelector('[data-role="takeaway"]')?.textContent ?? ''
+
+/**
+ * What the reader actually sees, with the Detail toggle off.
+ *
+ * The measured-number prose lives in `<span class="detail">` runs that are
+ * always in the DOM and hidden by CSS (`:root:not([data-detail='on'])`). jsdom
+ * applies no stylesheet, so `.textContent` returns the numbers whether or not
+ * they are on screen -- which means a caption could go visually blank and every
+ * textContent assertion here would still pass. This strips the detail runs the
+ * way the stylesheet does, so "the caption says X" means the reader can read X.
+ *
+ * Assertions about the plain description go through this. Assertions about the
+ * figures themselves go through detailText() below.
+ */
+const visible = (el) => {
+  if (!el) return ''
+  const clone = el.cloneNode(true)
+  for (const d of clone.querySelectorAll('.detail')) d.remove()
+  return clone.textContent.replace(/\s+/g, ' ').trim()
+}
+/** Only the prose behind the Detail toggle. */
+const detailText = (el) => {
+  if (!el) return ''
+  return [...(el.querySelectorAll('.detail') ?? [])]
+    .map((d) => d.textContent).join(' ').replace(/\s+/g, ' ').trim()
+}
+const roleEl = (id, role) => document.getElementById(id)?.querySelector(`[data-role="${role}"]`)
+
+// The dynamic takeaway is checked as the READER sees it. Reading .textContent
+// here would let a rewrite move every varying figure behind the toggle and
+// leave a static sentence on screen, and this assertion would still pass while
+// the page had quietly stopped responding to the team switcher.
+const takeaway = (id) => visible(roleEl(id, 'takeaway'))
 
 const before = { team: snap('team'), shrink: snap('shrinkage'), text: takeaway('shrinkage') }
 ok(before.team.length > 0, 'team section should render an svg on mount')
@@ -343,11 +374,24 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   ok(snap('complete-pooling').length > 0, 'the shared belief panel should render on mount')
 
   const nObs = state.scenario.observations.y.length
-  const caption = sec.querySelector('[data-role="caption"]').textContent
-  ok(new RegExp(`of ${nObs} serves`).test(caption),
-    `the caption should account for all ${nObs} serves, not one player's`)
-  ok(/every player on the team/i.test(caption),
-    'the caption should say whose serves these are')
+  const capEl = sec.querySelector('[data-role="caption"]')
+
+  // The visible caption DESCRIBES the panel; the serve count it used to open
+  // with is a readout of something already on the chart, so it now sits behind
+  // the Detail toggle. Both halves are asserted: the description has to say
+  // whose serves these are (the claim that distinguishes this section from the
+  // one-player one next door), and the count has to still exist to be revealed.
+  // Whose serves these are is the claim that distinguishes this section from
+  // the one-player one next door, so it stays visible -- but the wording is the
+  // section's to choose, so this asserts the claim rather than a sentence.
+  ok(/team|every player/i.test(visible(capEl)),
+    'the visible caption should say whose serves these are')
+  ok(/belief/i.test(visible(capEl)),
+    'the visible caption should describe what the marks are')
+  ok(!new RegExp(`of ${nObs} serves`).test(visible(capEl)),
+    'the visible caption should not read the serve count back off the chart')
+  ok(new RegExp(`of ${nObs} serves`).test(detailText(capEl)),
+    `the Detail run should still account for all ${nObs} serves, not one player's`)
 
   // The width trace is the section's second panel and carries the "diminishing
   // returns" argument that the fixed-ruler panel cannot show.
@@ -359,8 +403,13 @@ ok(snap('shrinkage') !== beforeSelect, 'selecting a player must redraw the shrin
   // per-serve data, not the rail's reference value. The ambient scale here is
   // probability, so flip away and back rather than setting it to what it is.
   const captionOf = () => sec.querySelector('[data-role="caption"]').textContent
-  ok(/success rate/i.test(captionOf()),
-    'the probability scale should quote a success rate for the team')
+  // The scale note is a CAVEAT, not a mark, so it now sits behind the Detail
+  // toggle: the rail's Scale control and the chart's own axis label already say
+  // which scale the reader is on, and the caption was the third place saying it.
+  // What still has to hold is that the caption restates the belief when the
+  // scale changes -- asserted below -- and that the rate survives to be revealed.
+  ok(/success rate/i.test(sec.querySelector('[data-role="caption"]').textContent),
+    'the probability scale should still restate the belief as a success rate')
   const onProbability = captionOf()
   setState({ scale: 'theta' }, 'scale')
   ok(captionOf() !== onProbability, 'the scale toggle should restate the shared belief')
@@ -558,12 +607,20 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
     ok(!cp.querySelector('.note'), '2D: complete pooling should draw, not opt out')
     ok(chartSvg('complete-pooling'), '2D: complete pooling should render a belief surface')
     const text = cp.textContent
-    ok(/plays absorbed/.test(text), '2D: the caption should count plays, not serves')
+    const capEl = cp.querySelector('[data-role="caption"]')
+    // The play count moved behind the Detail toggle; it must still be there,
+    // and it must still say plays rather than serves.
+    ok(/plays absorbed/.test(detailText(capEl)),
+      '2D: the Detail run should count plays, not serves')
+    ok(/filled regions|50%|90%/i.test(visible(capEl)),
+      '2D: the visible caption should describe what the filled regions are')
     for (const label of state.scenario.skill_labels) {
       ok(text.includes(label), `2D: the surface should name the "${label}" skill`)
     }
-    ok(/square|axis-aligned|tilt/i.test(text),
-      '2D: the section should say the belief cannot tilt')
+    // This one is checked on VISIBLE text: "it cannot tilt" is the section's
+    // whole argument, so it must survive with the numbers put away.
+    ok(/square|axis-aligned|tilt|lean/i.test(visible(cp)),
+      '2D: the visible prose should say the belief cannot tilt')
   }
 
   // The one-player walk-through IS one skill at a time -- a belief over two
@@ -841,6 +898,89 @@ if (existsSync(join(D, 'scenarios-2d', 'distinct__20260914__2d.json'))) {
   }
 
   console.log(`  section nav: ${labels.join(' · ')}`)
+}
+
+// --- the Detail disclosure, swept across every section --------------------
+// The per-section assertions above check particular sentences. This checks the
+// three ways the mechanism can fail silently EVERYWHERE at once.
+{
+  state.dimension = '1d'
+  state.population = 'distinct'
+  state.seed = 20260914
+  state.scenario = read('scenarios/distinct__20260914.json')
+  state.selectedPlayer = null
+  state.scale = 'probability'
+  for (const teardown of mounted) teardown()
+  mounted.length = 0
+  app.innerHTML = ''
+  for (const [, section] of SECTIONS) {
+    const { el, mount } = section()
+    app.appendChild(el)
+    mounted.push(mount() ?? (() => {}))
+  }
+  await settle(600)
+
+  let runs = 0
+  let withDetail = 0
+  for (const section of [...app.querySelectorAll(':scope > section')]) {
+    const id = section.id
+
+    // 1. The textContent trap. A `.detail` span assigned through
+    //    `el.textContent = ...` instead of `.innerHTML` does not become an
+    //    element -- it becomes the literal characters `<span class="detail">`
+    //    sitting in the reader's caption. Nothing else in this file would
+    //    notice, because the markup IS the text.
+    ok(!/<span|<\/span>|class="detail"/.test(section.textContent),
+      `${id}: literal markup leaked into the text -- a .detail span was assigned ` +
+      'through .textContent instead of .innerHTML')
+
+    // 2. Nothing went blank. Moving a whole caption behind the toggle would
+    //    leave the reader looking at an unlabelled chart.
+    for (const el of section.querySelectorAll('figcaption, .takeaway')) {
+      const full = el.textContent.replace(/\s+/g, ' ').trim()
+      if (!full) continue
+      const seen = visible(el)
+      ok(seen.length > 0,
+        `${id}: a ${el.tagName.toLowerCase()} is entirely behind the Detail toggle and reads blank with it off`)
+      // A description, not a stub left behind after the numbers were cut.
+      ok(seen.length >= 40 || seen === full,
+        `${id}: visible prose is down to ${seen.length} chars ("${seen}") -- too thin to describe the chart`)
+
+      // And the other direction. The site is narrated live, so a caption names
+      // the marks and stops; the numbers, the methodology, the control caveats
+      // and the provenance asides all sit behind the Detail toggle. Without a
+      // ceiling this silently creeps back: it was 15,238 visible chars across
+      // these blocks before the cut and 6,579 after, and nothing but this
+      // assertion would notice it climbing again.
+      //
+      // The exemptions are arguments a reader cannot get from the picture, and
+      // they are listed one by one rather than raising the limit for everyone:
+      //   pull-takeaway    -- CLAUDE.md's noise convention. "the trend is real,
+      //                       any single step is not" stays on screen.
+      //   takeaway-teams   -- the coverage collapse, 80% -> 11% against 85% ->
+      //   takeaway-coverage   89%. The chart draws the curves; only the prose
+      //                       says which of them is answering the question.
+      const EXEMPT = new Set(['pull-takeaway', 'takeaway-teams', 'takeaway-coverage'])
+      const ceiling = EXEMPT.has(el.dataset.role || '') ? 560 : 240
+      ok(seen.length <= ceiling,
+        `${id}: ${el.dataset.role || el.tagName.toLowerCase()} shows ${seen.length} visible chars ` +
+        `(limit ${ceiling}) -- move the numbers, methodology or caveats behind the Detail toggle\n    "${seen}"`)
+      const n = el.querySelectorAll('.detail').length
+      runs += n
+      if (n) withDetail++
+    }
+
+    // 3. Every `.detail` run actually holds something.
+    for (const d of section.querySelectorAll('.detail')) {
+      ok(d.textContent.trim().length > 0, `${id}: an empty .detail run`)
+    }
+  }
+
+  // The pass happened at all. If a future edit reverted the prose wholesale
+  // this would drop to zero and nothing else here would care.
+  ok(runs >= 20, `expected the measured numbers to be behind the toggle, found only ${runs} detail runs`)
+  console.log(`  detail disclosure: ${runs} runs across ${withDetail} captions/takeaways, ` +
+    'no literal markup, nothing blank with Detail off')
 }
 
 console.log(fails === 0 ? '\nOK - interactions rewire correctly' : `\n${fails} FAILURE(S)`)

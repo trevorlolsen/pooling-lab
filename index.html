@@ -47,6 +47,14 @@
         <button data-view="posterior" aria-pressed="false" title="Posteriors: each player's full posterior as a box (or a ring in two skills)">Posteriors</button>
       </span>
     </div>
+    <!-- The page reads as plain description; this puts the measured numbers
+         back. Off by default because the site is narrated live and the
+         presenter says the figures out loud. -->
+    <div class="rail-control">
+      <label>Detail</label>
+      <button id="detail" aria-pressed="false"
+              title="Show the measured numbers behind each chart: widths, rates, counts and the fitted constants">Numbers</button>
+    </div>
     <div class="rail-control" id="difficulty-control">
       <label for="difficulty">Serve difficulty d*</label>
       <input type="range" id="difficulty" min="-1.5" max="1.5" step="0.05" value="0" />

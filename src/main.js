@@ -23,6 +23,7 @@ const railView = document.getElementById('view')
 const railDifficulty = document.getElementById('difficulty')
 const difficultyValue = document.getElementById('difficulty-value')
 const difficultyControl = document.getElementById('difficulty-control')
+const railDetail = document.getElementById('detail')
 const progress = document.getElementById('progress')
 const rail = document.getElementById('rail')
 const sectionNav = document.getElementById('section-nav')
@@ -392,6 +393,26 @@ async function boot () {
       b.setAttribute('aria-pressed', String(b === button))
     }
     setState({ view: button.dataset.view }, 'view')
+  })
+
+  // Detail is a CSS disclosure, not a re-render: every `.detail` run is already
+  // in the DOM and the root attribute decides whether it shows. Sections are
+  // deliberately NOT asked to rebuild -- the prose they last wrote is the prose
+  // that reveals, so the two cannot disagree.
+  //
+  // The resize dispatch is the one thing that does have to happen. Revealing
+  // the numbers makes every caption taller, and lib/stickyFit.js sizes a pinned
+  // chart by measuring the panel's own furniture (legend, band filter, caption)
+  // off the DOM. Without this the four sticky sections keep the height they fitted
+  // against the short caption and their charts overhang the window by the
+  // difference. Every section already debounces resize into a re-render, so
+  // this reuses that path rather than adding a second one.
+  railDetail.addEventListener('click', () => {
+    const on = railDetail.getAttribute('aria-pressed') !== 'true'
+    railDetail.setAttribute('aria-pressed', String(on))
+    document.documentElement.dataset.detail = on ? 'on' : 'off'
+    setState({ detail: on }, 'detail')
+    window.dispatchEvent(new Event('resize'))
   })
 
   railDifficulty.addEventListener('input', () => {

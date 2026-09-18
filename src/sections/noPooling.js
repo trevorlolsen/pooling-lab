@@ -238,13 +238,15 @@ export function noPooling () {
       return {
         lede: 'Before this player serves, we have to believe something.',
         body: `The prior is <span class="figures">N(0, 2)</span> on ability — a bell
-          on θ, and close to knowing nothing about a success rate. Its 90% range,
-          ${f.summary.low.toFixed(2)} to ${f.summary.high.toFixed(2)} on θ, comes
-          out as a chance of
+          on θ, and close to knowing nothing about a success rate. Its 90% range
+          covers very nearly every success rate there is, at this player's own
+          average difficulty.
+          <span class="detail">It runs ${f.summary.low.toFixed(2)} to
+          ${f.summary.high.toFixed(2)} on θ, which comes out as a
           ${(100 * plogis(s.low - dbar)).toFixed(0)}% to
-          ${(100 * plogis(s.high - dbar)).toFixed(0)}% of making a serve at this
-          player's average difficulty (d = ${dbar.toFixed(2)}). That is nearly the
-          whole range there is. "Knowing nothing" is not one curve — flip the
+          ${(100 * plogis(s.high - dbar)).toFixed(0)}% chance of making a serve at
+          d = ${dbar.toFixed(2)}. </span>
+          "Knowing nothing" is not one curve — flip the
           <b>Scale</b> control in the bar above and the caption says the same
           belief in success-rate terms.`
       }
@@ -255,8 +257,9 @@ export function noPooling () {
         body: `The strip under the chart is that serve's likelihood, and it has no
           peak — it rises from 0 toward 1 and stays there. One observation did not
           tell us where this player is. It told us which way to lean. The belief
-          moved from 0.00 to ${f.summary.mean.toFixed(2)} and is still
-          ${f.summary.sd.toFixed(2)} wide.`
+          leaned that way and stayed very nearly as wide as it started.
+          <span class="detail">It moved from 0.00 to ${f.summary.mean.toFixed(2)}
+          and is still ${f.summary.sd.toFixed(2)} wide.</span>`
       }
     }
     if (k === 2) {
@@ -273,9 +276,10 @@ export function noPooling () {
     if (k === 3) {
       return {
         lede: `${serves(f.n)[0].toUpperCase()}${serves(f.n).slice(1)}.`,
-        body: `Still wide — ${f.summary.sd.toFixed(2)} on θ, a 90% range of
-          ${f.summary.low.toFixed(2)} to ${f.summary.high.toFixed(2)} — and still
-          honest about it. This is the state every five-serve player in ${refTo('shrinkage')}
+        body: `Still wide — ${f.summary.sd.toFixed(2)} on θ — and still honest
+          about it.<span class="detail"> A 90% range of
+          ${f.summary.low.toFixed(2)} to ${f.summary.high.toFixed(2)}.</span>
+          This is the state every five-serve player in ${refTo('shrinkage')}
           is left in, and a belief this wide is one the team can overrule cheaply.`
       }
     }
@@ -292,9 +296,11 @@ export function noPooling () {
       return {
         lede: 'Difficulty carries weight.',
         body: `From exactly this belief, after ${serves(f.n)}, one more serve
-          <em>made</em> at d = ${hard.toFixed(2)} — the hardest this player has
-          faced — would move the estimate ${hardMove.toFixed(3)}. The same make at
-          d = ${easy.toFixed(2)} would move it ${easyMove.toFixed(3)}.
+          <em>made</em> at the hardest difficulty this player has faced moves the
+          estimate by a different amount than the same make at the easiest.
+          <span class="detail">The hardest is d = ${hard.toFixed(2)}, which would move
+          it ${hardMove.toFixed(3)}; at d = ${easy.toFixed(2)} the move is
+          ${easyMove.toFixed(3)}. </span>
           ${held
             ? 'Bayesian updating weighs evidence by how hard it was to produce, and nothing in the model was told to.'
             : 'On this player the ordering comes out the other way round — the belief has already drifted far enough that the easier serve is the more surprising one. The weighting is real; which serve is surprising depends on where you already stand.'}`
@@ -305,15 +311,18 @@ export function noPooling () {
     const fittedMean = fitted ? fitted.theta_mean[fitted.child_id.indexOf(playerId)] : null
     return {
       lede: `${serves(last.n)[0].toUpperCase()}${serves(last.n).slice(1)}, and we are done.`,
-      body: `The belief has landed at ${last.summary.mean.toFixed(3)} with a width
-        of ${last.summary.sd.toFixed(3)}${
+      body: `The belief has settled into a single narrow curve${
           fittedMean != null
-            ? ` — and the no-pooling estimate this site has been showing you for player ${playerId} all along is ${fittedMean.toFixed(3)}, a gap of ${Math.abs(last.summary.mean - fittedMean).toFixed(3)}`
-            : ''}. Their true ability, which the model never saw, is
-        ${scenario().truth.theta_true[k5].toFixed(3)}. You just watched the site's
-        own number being built, one serve at a time. ${
+            ? `, sitting on top of the no-pooling estimate this site has been quoting for player ${playerId} all along`
+            : ''}. The green rule is their true ability, which the model never saw.
+        <span class="detail">The curve is centred on ${last.summary.mean.toFixed(3)} with a
+        width of ${last.summary.sd.toFixed(3)}${
           fittedMean != null
-            ? 'The gap is sampling noise in the 4,000-draw summary the site ships, not a disagreement about the arithmetic — this grid is the exact posterior.'
+            ? `, against a shipped estimate of ${fittedMean.toFixed(3)} — a gap of ${Math.abs(last.summary.mean - fittedMean).toFixed(3)}`
+            : ''}, and the true ability is ${scenario().truth.theta_true[k5].toFixed(3)}. </span>
+        You just watched the site's own number being built, one serve at a time. ${
+          fittedMean != null
+            ? '<span class="detail">The gap is sampling noise in the 4,000-draw summary the site ships, not a disagreement about the arithmetic — this grid is the exact posterior.</span>'
             : ''}`
     }
   }
@@ -342,13 +351,20 @@ export function noPooling () {
       height: stickyChartHeight(chartBox, { min: 220, max: 340, fallback: 320, reserve: 90 })
     }))
     el.querySelector('[data-role="caption"]').innerHTML =
-      `Player ${playerId}, ${at} of ${frames.length - 1} serves absorbed. ` +
-      'Orange is the belief now, grey dashed is the belief one serve ago, and the faint orange ' +
-      'threads behind them are every belief this player has already been given. ' +
-      'The strip below is the current serve\'s likelihood, scaled to a maximum of 1 — its height ' +
-      'means nothing, only its shape does. ' +
-      'Both axes are fixed for this player across every step, so the narrowing you see is real ' +
-      'and not the ruler shrinking with the curve. ' +
+      // Two sentences: whose belief this is, and what each mark is. Everything
+      // else is justification rather than description -- the serve count is
+      // already on the chart and in the step beside it, the strip's
+      // normalisation, the fixed ruler and the scale note explain why the
+      // figure is drawn the way it is -- so all of it sits behind the rail's
+      // Detail toggle.
+      `Player ${playerId}'s belief, built from their own serves alone.` +
+      `<span class="detail"> ${at} of ${frames.length - 1} absorbed.</span> ` +
+      'Orange is the belief now, grey dashed one serve ago, faint threads every belief ' +
+      'so far, the strip below this serve\'s likelihood.' +
+      '<span class="detail"> The strip is scaled to a maximum of 1 — its height means ' +
+      'nothing, only its shape does. Both axes are fixed for this player across every ' +
+      'step, so the narrowing you see is real and not the ruler shrinking with the ' +
+      'curve.</span> ' +
       scaleLine(frames[at].density)
 
     el.querySelector('[data-role="lede"]').innerHTML =
@@ -368,32 +384,42 @@ export function noPooling () {
    * (that is E_d[plogis(θ − d)], not plogis(E[θ])), and the θ interval mapped
    * through plogis at their average difficulty, which is exact because plogis is
    * monotone.
+   *
+   * The whole line is a `.detail` run. Which scale the reader is on is a caveat
+   * about a control, not a mark on the chart, and the rail's Scale button and
+   * the axis label already say it twice; the restatement and the plogis warning
+   * are the reasoning behind the figure rather than a description of it.
    */
   function scaleLine (density) {
-    if (state.scale !== 'probability') return 'Shown on the ability scale θ.'
+    const theta = '<span class="detail">Shown on the ability scale θ.</span>'
+    if (state.scale !== 'probability') return theta
     const ds = rows.map((r) => scenario().observations.difficulty[r])
-    if (!ds.length) return 'Shown on the ability scale θ.'
+    if (!ds.length) return theta
     const dbar = mean(ds)
     const rate = predictedRate(density, GRID, ds)
     const s = summarize(density, GRID)
-    return `On the probability scale: against the serves this player actually faces, ` +
-      `this belief puts their success rate at ${(100 * rate).toFixed(0)}%, and a 90% range of ` +
+    return '<span class="detail">On the probability scale the same belief is restated as a ' +
+      'success rate, against the serves this player actually faces rather than against an ' +
+      `average one. It puts that rate at ${(100 * rate).toFixed(0)}%, with a 90% range of ` +
       `${(100 * plogis(s.low - dbar)).toFixed(0)}% to ${(100 * plogis(s.high - dbar)).toFixed(0)}% ` +
       `for a serve of their average difficulty (d = ${dbar.toFixed(2)}). ` +
-      `The panel itself stays on θ — a density does not survive being bent through plogis.`
+      'The panel itself stays on θ — a density does not survive being bent through ' +
+      'plogis.</span>'
   }
 
   function renderTakeaway () {
     const last = frames[frames.length - 1]
     const first = frames[Math.min(1, frames.length - 1)]
     el.querySelector('[data-role="takeaway"]').innerHTML = `
-      After one serve this player's belief was ${fmt(first.summary.sd)} wide. After
-      ${fmt(last.n, 0)} it is ${fmt(last.summary.sd)} —
-      ${fmt(first.summary.sd / Math.max(last.summary.sd, 1e-9), 1)}× narrower.
-      <strong>No step in that loop is different from any other.</strong> The same
-      multiplication ran ${fmt(last.n, 0)} times, and the width it ends on is the
-      only thing that decides how hard the team can overrule this player later.
-      <span class="aside">Every number in this section is computed in the browser
+      One player's own serves, and nothing else, narrowed their belief by a factor
+      of ${fmt(first.summary.sd / Math.max(last.summary.sd, 1e-9), 1)}.
+      <span class="detail">After one serve it was ${fmt(first.summary.sd)} wide;
+      after ${fmt(last.n, 0)} it is ${fmt(last.summary.sd)}.</span>
+      <strong>No step in that loop is different from any other.</strong>
+      <span class="detail">The same multiplication ran once per serve, and the width
+      it ends on is the only thing that decides how hard the team can overrule this
+      player later.</span>
+      <span class="aside detail">Every number in this section is computed in the browser
       from the serves in the scenario file, on a 1025-point grid over
       θ ∈ [−8, 8]. It is the exact posterior for this model, not a re-fit — which
       is why it lands on the fitted estimate rather than near it.</span>`
@@ -457,15 +483,20 @@ export function noPooling () {
 
     const nObs = scenario().observations.y.length
     el.querySelector('[data-role="free-caption"]').innerHTML =
-      `Player ${playerId}, ${freeStep} of ${frames.length - 1} serves absorbed. ` +
-      `The black curve is <b>complete pooling</b> — the identical updating run over all ` +
-      `${nObs} serves in this scenario, which is ${refTo('complete-pooling')}, and is why it ` +
-      `does not move when you change player. ` +
-      `The two ticks on the axis are the prior's answer (grey, always 0) and the model's now ` +
-      `(orange); the strip below is the likelihood of the serve just absorbed, scaled to a maximum ` +
-      `of 1, and it is the shape the belief was multiplied by to get here. ` +
-      `Both axes are fixed for this player across every step. ` +
-      `Change the player and watch which curves jump and which one does not. ` +
+      // One sentence naming the panel, one naming the marks. The cross-reference
+      // to the pooled section, the serve count behind the black curve, the
+      // strip's normalisation and the fixed ruler are all explanation rather
+      // than naming, so they go behind the Detail toggle with the numbers.
+      `Player ${playerId}'s belief, with the controls live.` +
+      `<span class="detail"> ${freeStep} of ${frames.length - 1} absorbed.</span> ` +
+      `Black is <b>complete pooling</b> over every serve here; the ticks are the prior's ` +
+      `answer and the model's now; the strip below is the serve just absorbed.` +
+      `<span class="detail"> Complete pooling is the identical updating run over all ` +
+      `${nObs} serves in this scenario, which is ${refTo('complete-pooling')}, and is why ` +
+      `it does not move when you change player. Grey is the prior's tick (always 0) and ` +
+      `orange the model's; the strip is the likelihood that was multiplied in, scaled to a ` +
+      `maximum of 1. Both axes are fixed for this player across every step. Change the ` +
+      `player and watch which curves jump and which one does not.</span> ` +
       scaleLine(frame.density)
   }
 
@@ -477,6 +508,15 @@ export function noPooling () {
    * summarised into a third number at all -- it is drawn in full, as the
    * likelihood strip under the panel. That strip is the honest object here: one
    * serve's likelihood often has no peak to quote, and the shape says why.
+   *
+   * The prose describes the two ticks rather than reading both numbers back; the
+   * prior's constant 0.000 sits behind the rail's Detail toggle, while the mean
+   * stays visible because it is the thing that moves when the reader changes
+   * step, player or team. The live readout beside the controls keeps both.
+   *
+   * Visible: where the ticks stand, where to look for the evidence, and the
+   * punchline. How to read the strip, and which serve it was, are behind the
+   * toggle -- they explain a mark the visible sentence has already named.
    */
   function renderEstimates (frame) {
     const box = el.querySelector('[data-role="estimates-takeaway"]')
@@ -488,26 +528,27 @@ export function noPooling () {
       `<span class="figures">${model.toFixed(3)}</span>`
 
     if (frame.n === 0) {
-      box.innerHTML = `No serves yet. The prior alone puts this player at
-        <strong class="figures">0.000</strong>, and the strip under the panel is
-        empty — there is nothing yet to multiply by. Step forward and watch one
-        serve's likelihood arrive, then the next, and the orange tick pull away
-        from the grey one.`
+      box.innerHTML = `No serves yet. The two ticks sit on top of each other and the
+        strip under the panel is empty<span class="detail">: the prior alone is all
+        there is, and it puts this player at
+        <strong class="figures">0.000</strong></span>, because there is nothing yet to
+        multiply by. Step forward and watch the orange tick pull away from the grey one.`
       return
     }
 
     const made = frame.y === 1
-    box.innerHTML = `After ${serves(frame.n)}: the prior alone said
-      <strong class="figures">0.000</strong> and the model says ${fmt(model)}.
-      The gap between the two ticks is the whole of what ${serves(frame.n)}
-      bought. <strong>Nothing chose that number.</strong> It is what multiplying
-      a prior by a likelihood does — and the likelihood in question is drawn in
-      full in the strip below, the serve you just absorbed
-      (${made ? 'made' : 'missed'} at d = ${frame.difficulty.toFixed(2)}).
-      Read it as a lean rather than an estimate: it rises the ${made ? 'higher' : 'lower'}
-      you suppose this player to be and has no peak of its own to quote. Keep
-      stepping and the belief pulls further from 0; how far it gets is exactly
-      how far the serves outweigh the prior.`
+    box.innerHTML = `After ${serves(frame.n)} the two ticks have pulled apart:
+      grey is the prior alone, and the model says ${fmt(model)} now.
+      <span class="detail">The prior's own answer is
+      <strong class="figures">0.000</strong>, by construction. </span>
+      What moved it is the strip below, the serve just absorbed<span class="detail">
+      (${made ? 'made' : 'missed'} at d = ${frame.difficulty.toFixed(2)})</span>.
+      <strong>Nothing chose that number.</strong>
+      <span class="detail">It is what multiplying a prior by a likelihood does. Read
+      the strip as a lean rather than an estimate: it rises the
+      ${made ? 'higher' : 'lower'} you suppose this player to be and has no peak of
+      its own to quote. Keep stepping and the belief pulls further from 0; how far it
+      gets is exactly how far the serves outweigh the prior.</span>`
   }
 
   /** The step-independent half: everything that only moves with the frames. */
@@ -527,6 +568,11 @@ export function noPooling () {
    * interaction-test.mjs pins. The order-dependent half of the lesson (the
    * sample rate flailing at 0% for the first few serves) lives in the trace
    * caption, where it is allowed to move.
+   *
+   * Visible: the claim and its punchline, both of which name the player and so
+   * move with the rail's team and population switches. The plogis correction is
+   * a methodological warning about an arithmetic the reader has not been shown,
+   * so it goes behind the Detail toggle with the figures it argues from.
    */
   function renderRateTakeaway () {
     const last = frames[frames.length - 1]
@@ -534,15 +580,17 @@ export function noPooling () {
     const dbar = mean(ds)
     const naive = plogis(last.summary.mean)
     el.querySelector('[data-role="rate-takeaway"]').innerHTML = `
-      Player ${playerId} made ${fmt(last.makes, 0)} of ${fmt(last.n, 0)} — a success
-      rate of ${pct(last.sampleRate)}. The belief we just built predicts
-      ${pct(last.predictedRate)} for the serves they actually faced, which is the
-      number that running rate is converging to.
+      Player ${playerId}'s running success rate is converging on what the belief we
+      just built predicts for the serves they actually faced —
+      <strong>not on some fixed number attached to the player.</strong>
+      <span class="detail">They made ${fmt(last.makes, 0)} of ${fmt(last.n, 0)}, a
+      rate of ${pct(last.sampleRate)}, against a predicted
+      ${pct(last.predictedRate)}.
       <strong>It is not plogis of the posterior mean.</strong> That would be
       ${pct(naive)}, from an ability of ${fmt(last.summary.mean)} — a different
       question, because it asks about a serve of difficulty 0 and this player
-      faced an average difficulty of ${fmt(dbar, 2)}.
-      <span class="aside">Shuffle the order and every number in this paragraph
+      faced an average difficulty of ${fmt(dbar, 2)}.</span>
+      <span class="aside detail">Shuffle the order and every number in this paragraph
       stays put. Multiplication commutes, so the serves can arrive in any order
       and leave the same belief behind — only the route changes.</span>`
   }
@@ -552,13 +600,24 @@ export function noPooling () {
     const last = frames[frames.length - 1]
     if (last.sampleRate == null) return
     const early = at(3)
+    // The early raw rate stays VISIBLE. Measured across all 25 scenarios the two
+    // lines always end within 0.02 of each other, so the destination is the same
+    // story every time and belongs in the detail run; the gap at three serves is
+    // both the argument -- the model declining to follow a rate that can only be
+    // one of four values -- and the part that moves when the reader changes team.
     el.querySelector('[data-role="trace-caption"]').innerHTML =
-      `The running success rate against what the model predicts for the serves actually faced. ` +
-      `After ${early.n} serves this player's running rate reads ${(100 * early.sampleRate).toFixed(0)}% ` +
-      `and the model still predicts ${(100 * early.predictedRate).toFixed(0)}% — it refuses to ` +
-      `conclude that much from ${early.n} serves. By ${last.n} the two are ` +
+      `Player ${playerId}'s running success rate against what the model predicts, one ` +
+      `point per serve.` +
+      `<span class="detail"> The prediction is for the serves they actually faced, and the ` +
+      `points run left to right in the order the serves arrived.</span> ` +
+      `The raw rate lurches early — after ${early.n} it reads ` +
+      `${(100 * early.sampleRate).toFixed(0)}% — while the model barely leaves its prior.` +
+      `<span class="detail"> That early the rate can only be one of four values at all, and ` +
+      `the model declines to conclude that much that fast: it still predicts ` +
+      `${(100 * early.predictedRate).toFixed(0)}% there, and by ${last.n} serves the two read ` +
       `${(100 * last.sampleRate).toFixed(0)}% and ${(100 * last.predictedRate).toFixed(0)}%. ` +
-      `This panel is the one thing on the page the Shuffle button really does change.`
+      `The two close on each other as the serves pile up. This panel is the one thing on ` +
+      `the page the Shuffle button really does change.</span>`
   }
 
   // --- wiring ---------------------------------------------------------------

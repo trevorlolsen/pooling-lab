@@ -15,6 +15,7 @@ export const state = {
   scale: 'theta',       // 'probability' | 'theta' -- the parameter space first, d* is opt-in
   view: 'point',        // 'point' | 'posterior' -- point estimate or full density
   difficulty: 0,        // d*, continuous over the shipped grid
+  detail: false,        // reveal the measured-number prose behind every caption
   selectedPlayer: null,
   step: {}              // section id -> current scroll step
 }

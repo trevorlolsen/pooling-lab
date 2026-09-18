@@ -129,9 +129,9 @@ export function covariateSplit ({ armId, number, eyebrow }) {
          label: these groups were assigned by shuffling the real ones, so they
          carry no information about ability.
          ${overlap.n_matching != null
-           ? `<strong class="figures">${overlap.n_matching}</strong> of
+           ? `<span class="detail"><strong class="figures">${overlap.n_matching}</strong> of
               <strong class="figures">${overlap.n_total}</strong> players happen to
-              keep their real group, which is about what chance would give.`
+              keep their real group, which is about what chance would give.</span>`
            : ''}`
 
     // Players whose assigned panel is not their true group. Read from the
@@ -224,61 +224,80 @@ export function covariateSplit ({ armId, number, eyebrow }) {
         height: Math.max(400, 60 + 30 * cov.G + 15 * nShown)
       }))
 
-    // The caption is assembled sentence by sentence: what each mark is, then
-    // what the posterior view adds, then the section-6 mismatch count. Section
-    // 6 gets its own sentence for the green mark -- there is no "true mean of
-    // a shuffled label", only the average of whoever was given it.
-    const trueSentence = twoD
-      ? (isCorrect
-          ? "the green dashed crosshair is that group's true mean"
-          : 'the green dashed crosshair is what the players given that label actually average — which, for a shuffled label, is just the overall mean')
-      : (isCorrect
-          ? "The green dashed line is what that group's ability actually averages"
-          : 'The green dashed line is what the players given that label actually average — which, for a shuffled label, is just the overall mean')
-    const mismatchSentence = !isCorrect && mismatched != null
-      ? ` The open pink dots are players assigned to the wrong group:
+    // The caption is a legend in prose: the marks, named compactly and
+    // together, and nothing else. Everything that explains rather than names --
+    // which skill is on which axis, where each mark's value comes from, what a
+    // shuffled label does to the green mark, why the rows are sorted as they
+    // are, what the band buttons do, what the posterior view's box or ring
+    // encloses, and how many players sit in the wrong panel -- is behind the
+    // rail's Detail toggle. With Detail off this is one narrated sentence per
+    // mark-list, which is what a live surface can carry.
+    const marks = twoD
+      ? `One panel per assigned group. Pink diamond: its estimated mean.
+         Green crosshair: what its players average. Blue crosshair: the population
+         mean. Grey: the pull.`
+      : `One panel per assigned group. Solid line: the group's estimated mean.
+         Green dashed: what its players average. Blue dashed: the population mean.
+         Grey: the pull.`
+    // Only the scrambled covariate puts anyone in the wrong panel, so only that
+    // arm names the open dots. The count behind them stays behind the toggle:
+    // the dots are already on the chart.
+    const mismatchMark = !isCorrect && mismatched != null
+      ? ` Open dots: players in the wrong panel.<span class="detail"> Their assigned
+         panel is not their true group —
          <strong class="figures">${mismatched}</strong> of
-         <strong class="figures">${overlap.n_total}</strong> sit in a panel that is
-         not their true group.`
+         <strong class="figures">${overlap.n_total}</strong> players.</span>`
       : ''
-    el.querySelector('[data-role="caption"]').innerHTML = twoD
-      ? `One panel per assigned group, ${skillLabel(1)} across and ${skillLabel(2)} up.
-         The pink diamond is the group's estimated mean with its 90% intervals in
-         each skill — the place its players get pulled toward; ${trueSentence}.
-         The blue dashed crosshair is the estimated population mean μ a model
-         without any covariate would have used. The grey arrow is the pull: from
-         what the player's own plays say to where the model put them. Turn on
-         Player numbers in the legend to see which × belongs to which point:
-         the same number sits beside both. The buttons above hide or show
-         players by how many plays they have; the panels and their diamonds
-         stay put.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}${mismatchSentence}`
-      : `One panel per assigned group. The solid line in each panel is that group's
-         estimated mean — the place its players get pulled toward. ${trueSentence}.
-         The blue dashed line is the estimated population mean μ a model without
-         any covariate would have used. The grey segment is the pull: from what the
-         player's own serves say to where the model put them. Rows are sorted by
-         their no-pooling estimate. The buttons above hide or show players by how
-         many serves they have; the panels and their target lines stay
-         put.${posterior ? " Box = the middle 50% of that model's posterior, whiskers = 90%." : ''}${mismatchSentence}`
+    // Section 6's green mark needs its own line in the detail: there is no
+    // "true mean of a shuffled label", only the average of whoever was given it.
+    const shuffledNote = isCorrect
+      ? ''
+      : ` A shuffled label has no group of its own, so the green mark sits on
+         what everybody averages.`
+    const capDetail = twoD
+      ? `<span class="detail"> ${skillLabel(1)} runs across and ${skillLabel(2)} up.
+         The diamond carries 90% intervals in each skill and marks the place that
+         group's players get pulled toward; the blue crosshair is the population
+         mean μ a model with no covariate would have used, and the grey arrow runs
+         from what a player's own plays say to where the model put them.${shuffledNote} Turn on Player numbers
+         in the legend to see which × belongs to which point: the same number sits beside
+         both. The buttons above hide or show players by how many plays they have; the
+         panels and their diamonds stay put.${posterior ? " Each ring encloses 50% of that model's posterior." : ''}</span>`
+      : `<span class="detail"> The solid line is the place that group's players get pulled
+         toward; the blue dashed line is the population mean μ a model with no covariate
+         would have used, and the grey segment runs from what a player's own serves say
+         to where the model put them.${shuffledNote} Rows are sorted by their no-pooling
+         estimate. The buttons above hide or show players by how many serves they have;
+         the panels and their target lines stay put.${posterior ? " Box = the middle 50% of that model's posterior, whiskers = 90%." : ''}</span>`
+    el.querySelector('[data-role="caption"]').innerHTML = `${marks}${mismatchMark}${capDetail}`
 
     const fmt = (x) => (scale === 'theta' ? x.toFixed(2) : x.toFixed(3))
     const globalText = twoD
       ? (globalTarget ? `(${fmt(globalTarget.x)}, ${fmt(globalTarget.y)})` : null)
       : (globalTarget != null ? fmt(globalTarget) : null)
     const where = twoD ? ' in the plane' : ''
+    // Claim, then punchline. The spread between the two targets stays in the
+    // open in both arms: it is the argument -- how far a grouping moved the
+    // place a player gets pulled to -- the contrast between a real grouping and
+    // a shuffled one, and the figure that changes when the reader picks another
+    // population. Behind the Detail toggle go the coordinates of the
+    // covariate-free mean (that point is already drawn, in blue dashes) and the
+    // sentence that restates the claim rather than making it.
     el.querySelector('[data-role="takeaway"]').innerHTML = isCorrect
-      ? `The two targets sit <strong class="figures">${fmt(spread)}</strong> apart${where}
-         ${globalText != null ? `— one either side of the
-         <span class="figures">${globalText}</span> a covariate-free model
-         would have used` : ''}. Players in different groups are now pulled in
-         <strong>opposite directions</strong>, and no player is dragged toward a
-         value nobody has.`
-      : `The two targets sit only <strong class="figures">${fmt(spread)}</strong>
-         apart${where}${globalText != null ? `, both effectively on top of the
-         <span class="figures">${globalText}</span> a covariate-free model
-         would have used` : ''}. The model looked for a difference between these
+      ? `Each group now has a target of its own,
+         <strong class="figures">${fmt(spread)}</strong> apart${where}${globalText != null
+          ? ` — one either side of the mean a covariate-free model would use<span class="detail">
+             (<span class="figures">${globalText}</span>)</span>`
+          : ''}. Players in different groups are pulled in
+         <strong>opposite directions</strong>.<span class="detail"> No player is dragged
+         toward a value nobody has.</span>`
+      : `The two targets barely come apart — only
+         <strong class="figures">${fmt(spread)}</strong> between them${where}${globalText != null
+          ? `, effectively on top of the mean a covariate-free model would use<span class="detail">
+             (<span class="figures">${globalText}</span>)</span>`
+          : ''}. <span class="detail">The model looked for a difference between these
          groups, found none, and quietly went back to treating everyone the same.
-         <strong>A useless covariate is not harmful — it is just wasted.</strong>`
+         </span><strong>A useless covariate is not harmful — it is just wasted.</strong>`
   }
 
   function mount () {

@@ -213,6 +213,23 @@ figcaption { font-size: 12.5px; color: var(--ink-faint); margin-top: 0.5rem; }
   color: var(--ink-soft);
   line-height: 1.5;
 }
+/* --- the Detail disclosure --------------------------------------------- */
+
+/* The visible prose describes the chart; the measured numbers live in
+   `.detail` runs inside the same sentence flow, and the rail's Detail button
+   reveals them by setting data-detail="on" on the root.
+
+   Always in the DOM, never rebuilt: toggling is one attribute and one style
+   recalculation, so it cannot fall out of step with whatever the section last
+   rendered. That also means `.textContent` still sees the numbers, which is
+   why scripts/interaction-test.mjs reads captions through visibleText().
+
+   Written as :root:not(...) rather than a bare `.detail { display: none }` so
+   it scores 0-2-0 and wins over `.aside`'s own `display: block` wherever the
+   two are combined -- a plain `.detail` rule would tie on specificity and
+   depend on which of the two sits later in this file. */
+:root:not([data-detail='on']) .detail { display: none; }
+
 .note {
   max-width: var(--measure);
   font-size: 0.92rem;
@@ -396,7 +413,11 @@ input[type='range']:focus-visible { outline: 2px solid var(--partial); outline-o
 
 /* Thirty-odd viewports of page across nine sections. The nav is a second
    row of the sticky rail: where you are, and one click to anywhere else.
-   Entries are built by main.js from each section's own eyebrow. */
+   Entries are built by main.js from each section's own eyebrow.
+
+   The row fits without scrolling from 1166px up -- the nine entries measure
+   1133px and the page keeps a 1rem gutter either side. Below that it scrolls,
+   which is the honest answer: no width the rail can reach would hold them. */
 
 /* The rail is sticky, so a section scrolled to its own top lands underneath
    it. main.js publishes the rail's measured height as --rail-h; the fallback
@@ -408,7 +429,27 @@ main > section { scroll-margin-top: var(--rail-h, 5.5rem); }
      keep their layout untouched. */
   flex: 1 0 100%;
   min-width: 0;
-  max-width: 100%;
+
+  /* Nine entries measure 1133px; the rail's content box is capped at --wide
+     (1088px) and centred, so the row was 45px short at EVERY width -- on a
+     1920px monitor it scrolled with 416px of empty rail either side of it.
+
+     Let this one row bleed symmetrically back out of that centring. The bleed
+     never exceeds the rail's own padding (less a 1rem gutter), so the page
+     itself never gains a scrollbar, and it is capped at --rail-nav-bleed so
+     the nav stays visibly a part of the rail rather than running to the
+     window edges. 4rem each side buys 1216px: the nine fit with 83px spare.
+
+     Deliberately not the two neighbouring options: raising --wide also drives
+     .wrap and would widen every chart panel, and a rail-only --rail-wide would
+     drag the controls ROW off the column the article below is set in. Only the
+     nav needs the width, so only the nav takes it. */
+  --rail-nav-bleed: 4rem;
+  margin-inline: calc(-1 * min(
+    var(--rail-nav-bleed),
+    max(0px, (100vw - var(--wide)) / 2 - 1rem)
+  ));
+
   display: flex;
   align-items: center;
   gap: 0.2rem;
@@ -452,10 +493,11 @@ main > section { scroll-margin-top: var(--rail-h, 5.5rem); }
   color: var(--ink-faint);
 }
 /* The number always shows; the title is what gives way when space runs out.
-   The cap was set so eight fit the rail's own 68rem measure; at nine the nav
-   starts to scroll at desktop width, which overflow-x already handles. The six short
-   titles stay whole and only sections 4 and 5, whose eyebrows are sentences,
-   are cut. */
+   At 7.5rem the seven short titles stay whole and only sections 8 and 9, whose
+   eyebrows are sentences, are cut. Lowering the cap is NOT how the nine were
+   made to fit -- that is the bleed above. It would buy about 30px while
+   clipping "Adaptive shrinkage" and both groupings mid-word, which costs more
+   to read than it saves. */
 .rail-nav .rail-nav-title {
   min-width: 0;
   max-width: 7.5rem;
@@ -477,9 +519,14 @@ main > section { scroll-margin-top: var(--rail-h, 5.5rem); }
 
 @media (max-width: 860px) {
   .rail-nav { gap: 0.1rem; margin-top: 0; }
-  /* Nine entries do not fit a phone. Truncate harder and let the nav itself
-     scroll sideways: it is a flex item with min-width: 0 inside the rail, so
-     this scrolls the row and never widens the page. */
+  /* Nine entries do not fit a phone and no cap will make them. Truncate harder
+     and let the nav itself scroll sideways: it is a flex item with
+     min-width: 0 inside the rail, so this scrolls the row and never widens the
+     page, and sectionNav.js's keepEntryVisible() drags the current entry back
+     into view as the reader scrolls. The bleed above is already zero here --
+     the rail is down to its 1rem gutter, so there is no padding to bleed into
+     and this block is unaffected by it. Measured at 860px: the row wants
+     846px against 828px available, so it scrolls by 18px. */
   .rail-nav button { padding: 0.14rem 0.4rem; }
   .rail-nav .rail-nav-title { max-width: 9ch; }
 }

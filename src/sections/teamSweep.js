@@ -176,79 +176,99 @@ export function teamSweep () {
     // The true μ as the text quotes it -- read from the payload, not typed in.
     const muTruth = Number(sweep.truth.mu).toFixed(2)
 
-    // (a) widths
-    el.querySelector('[data-role="caption-widths"]').textContent =
-      `A different team of eight from the 40-player roster the rest of the story uses: ` +
-      `${J} players observed ${first} to ${last} times each, nested, refitted at every step. ` +
-      `Widths of the 90% posterior intervals; numbers in the text are on the ability scale. ` +
-      `The dotted lines are the mean widths across ${coverage.n_teams} replicate teams, in each colour, ` +
-      `shown on the ability scale only: this team is one draw, and they show it is a typical one. ` +
-      `On the probability scale this section is fixed at d* = 0; the slider does not apply here.`
+    // (a) widths. Visible: what the lines are, and which way is better. The
+    // method note, the dotted replicate means, the ability-scale caveat and the
+    // fixed-d* caveat all sit behind the Detail toggle.
+    el.querySelector('[data-role="caption-widths"]').innerHTML =
+      `Each line is how wide one belief stays — the width of its 90% interval — as every player ` +
+      `on the team is watched longer, from a handful of serves each to a thousand. Lower is sharper.` +
+      `<span class="detail"> A different team of ${J} from the 40-player roster the rest of the ` +
+      `story uses, observed ${first} to ${last} times each, nested, refitted at every step. ` +
+      `The dotted lines behind them are the same widths averaged over the replicate teams, in ` +
+      `each colour: this team is one draw, and they show it is an ordinary one. Those and the ` +
+      `τ/√${J} floor are drawn on the ability scale only, and the figures quoted below are on ` +
+      `that scale too. This section is its own experiment, fixed at d* = 0; the slider does not ` +
+      `apply here.</span>`
     el.querySelector('[data-role="takeaway-widths"]').innerHTML = `
-      The team's own average is the easy part: its 90% interval is
-      ${fig(d0.team_width)} wide at ${first} serves per player and
-      ${fig(dN.team_width)} at ${last} — it collapses. The population mean does
-      not follow. Its interval is still ${fig(dN.mu_width)} wide at ${last}
-      serves, against a floor of ${fig(floor)} that eight players can never get
-      under (τ/√${J}, with τ = ${fig(tau, 1)}). And a player nobody has seen
-      stays ${fig(dN.new_width)} wide — a population with spread τ puts 90% of
-      its players in a band ${fig(2 * 1.645 * tau)} wide, and no amount of
-      watching these eight can narrow that.
+      The team's own average keeps tightening.<span class="detail"> Its interval
+      is ${fig(d0.team_width)} wide at ${first} serves per player and
+      ${fig(dN.team_width)} at ${last}.</span> The population mean does not — its
+      interval flattens against a floor that eight players can never get
+      under<span class="detail"> — still ${fig(dN.mu_width)} wide at ${last}
+      serves, against ${fig(floor)} = 2 × 1.645 × τ/√${J}, with
+      τ = ${fig(tau, 1)}</span>.<span class="detail"> A player nobody has seen
+      stays about as spread out as the population itself: that band is
+      ${fig(2 * 1.645 * tau)} wide and the prediction holds at
+      ${fig(dN.new_width)}.</span>
       <strong>More data on the same people sharpens the people, not the
       population.</strong>`
 
-    // (b) ridges
-    el.querySelector('[data-role="caption-ridges"]').textContent =
+    // (b) ridges. The seed rule is a justification of the team choice, so it
+    // goes behind the toggle -- which means this caption is innerHTML now, not
+    // textContent, or the span would print as literal characters.
+    el.querySelector('[data-role="caption-ridges"]').innerHTML =
       `Posterior densities at each step, each scaled to its own peak. ` +
       `The dashed rule is the true population mean; the orange rule is this team's true average.` +
-      seedNote
+      (seedNote ? `<span class="detail">${seedNote}</span>` : '')
     const inside = dN.team_covers_mu
     const muInside = dN.mu_covers_mu
     el.querySelector('[data-role="takeaway-ridges"]').innerHTML = `
-      Watch the orange curve. It slides onto this team's true average of
-      ${fig(teamTruth, 3)} and away from μ. By ${last} serves the sample
-      average is ${fig(dN.team_mean, 3)} with a 90% interval from
-      ${fig(dN.team_low, 3)} to ${fig(dN.team_high, 3)} —
+      Row by row the orange curve narrows onto this team's own true average, not
+      μ.<span class="detail"> That average is ${fig(teamTruth, 3)}; by ${last}
+      serves the sample average is ${fig(dN.team_mean, 3)}, with a 90% interval
+      from ${fig(dN.team_low, 3)} to ${fig(dN.team_high, 3)}. The true μ is
+      ${muTruth}.</span>
       ${inside
-        ? `which, on this team, still happens to contain μ = ${muTruth}`
-        : `which no longer contains μ = ${muTruth}, and is right not to: this team really does average above it`}.
-      The blue curve for μ itself ${muInside ? `still contains ${muTruth}` : `has slipped off ${muTruth} too`},
+        ? `At the last step it still contains μ — one draw of eight can land either way.`
+        : `At the last step it no longer contains μ, and it is right not to.`}
+      <span class="detail">The blue curve for μ itself ${muInside ? 'still covers μ' : 'has slipped off μ too'},
       because it is wider on purpose: it carries the uncertainty of having drawn
-      only eight people. <strong>The team's average is not the population's,
-      and the model knows the difference.</strong>`
+      only eight people.</span> <strong>The team's average is not the
+      population's.</strong>`
 
-    // (c) ordered teams
-    el.querySelector('[data-role="caption-teams"]').textContent =
-      `${coverage.n_teams} teams of ${coverage.n_players}, one facet per step, ranked by their posterior sample average. ` +
-      `Orange bars contain μ, red bars miss it; blue bars are the same teams' intervals for μ, ` +
-      `offset just below; the dashed rule is the true population mean. ` +
-      `The ringed bar is the team the charts above follow (seed ${coverage.walk_through_seed ?? sweep.seed}), ` +
-      `so you can watch it settle into its place among the hundred.`
+    // (c) ordered teams. The caption names the bars and nothing else; the
+    // ranking rule, the seed and how to read the facets sit behind the toggle.
+    // The takeaway carries a coverage verdict, so it keeps its figures.
+    el.querySelector('[data-role="caption-teams"]').innerHTML =
+      `${coverage.n_teams} teams<span class="detail"> of ${coverage.n_players}</span>, one facet per step, ` +
+      `each a thin bar spanning its 90% interval. Orange contains μ, red misses it, blue is that ` +
+      `team's interval for μ; the dashed rule is μ, the ringed bar the team above` +
+      `<span class="detail"> (seed ${coverage.walk_through_seed ?? sweep.seed})</span>.` +
+      `<span class="detail"> Bars are stacked in order of where each team's average sits. Read ` +
+      `down a facet for the spread of teams, and across facets for what more data does to that ` +
+      `spread.</span>`
     el.querySelector('[data-role="takeaway-teams"]').innerHTML = `
-      A precisely known team average is allowed to miss μ. At ${first} serves
-      per player the sample-average interval contains μ for ${pct(s0.team_covers_mu)}
-      of the ${coverage.n_teams} teams; at ${last} it contains μ for
-      ${pct(sN.team_covers_mu)}, because the bars have shrunk onto each team's
-      own true average, which is almost never μ. The interval for μ itself
-      contains it for ${pct(s0.mu_covers_mu)} of teams at ${first} serves and
-      ${pct(sN.mu_covers_mu)} at ${last}. <strong>One falls toward zero, the
-      other holds near its nominal 90%</strong> — the first is answering a
-      different question.`
+      A precisely known team average is allowed to miss μ. The sample-average
+      interval contains μ for ${pct(s0.team_covers_mu)} of the
+      ${coverage.n_teams} teams at ${first} serves each, but only
+      ${pct(sN.team_covers_mu)} at ${last} — the bars have shrunk onto each
+      team's own true average, which is almost never μ. The interval for μ
+      itself holds: ${pct(s0.mu_covers_mu)} and ${pct(sN.mu_covers_mu)}.
+      <strong>One falls toward zero, the other holds near its nominal
+      90%</strong> — the first is answering a different question.`
 
-    // (d) coverage curves
-    el.querySelector('[data-role="caption-coverage"]').textContent =
-      `Share of ${coverage.n_teams} teams whose 90% interval contains the true μ; ` +
-      `shaded: 95% uncertainty bands (Wilson), in each curve's colour.`
+    // (d) coverage curves. The caption names the three marks; what the dashed
+    // line means to read and what the bands are go behind the toggle. The
+    // takeaway is the verdict of the whole section, so it keeps its figures.
+    el.querySelector('[data-role="caption-coverage"]').innerHTML =
+      `One curve per belief: the share of the ${coverage.n_teams} teams whose 90% interval ` +
+      `contains the true μ, as the data grow. The dashed line is the 90% they promise; ` +
+      `the shading is how uncertain each share is.` +
+      `<span class="detail"> Counted over only that many teams; the bands are 95% Wilson, in each ` +
+      `curve's colour. A curve sitting on the dashed line is keeping the promise, and a curve ` +
+      `falling away from it is not.</span>`
     el.querySelector('[data-role="takeaway-coverage"]').innerHTML = `
-      The same counts as curves: the sample-average interval covers μ in
-      ${pct(s0.team_covers_mu)} of teams at ${first} serves and ${pct(sN.team_covers_mu)}
-      at ${last}; μ's own interval covers it in ${pct(s0.mu_covers_mu)} and
-      ${pct(sN.mu_covers_mu)}; the unseen-player interval in
-      ${pct(s0.new_covers_mu)} and ${pct(sN.new_covers_mu)}.
+      The sample-average interval starts near the 90% it promises and then
+      slides away, from ${pct(s0.team_covers_mu)} of teams at ${first} serves to
+      ${pct(sN.team_covers_mu)} at ${last}. μ's own interval holds near nominal
+      the whole way<span class="detail"> — ${pct(s0.mu_covers_mu)} at
+      ${first} serves and ${pct(sN.mu_covers_mu)} at ${last}</span>. And the
+      unseen-player interval never drops below ${pct(s0.new_covers_mu)}: it is
+      so wide that it can hardly fail to contain μ.
       <strong>Knowing your eight players perfectly does not tell you the next
-      eight.</strong> The population level is what carries over, and its
-      uncertainty is set by how many people you have seen, not by how long you
-      watched them.`
+      eight.</strong><span class="detail"> The population level is what carries
+      over, and its uncertainty is set by how many people you have seen, not by
+      how long you watched them.</span>`
   }
 
   async function render () {
